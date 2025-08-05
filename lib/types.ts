@@ -78,8 +78,10 @@ export interface CartItem {
 
 export interface MenuStructure {
   main_categories: MainCategory[]
-  total_products: number
   featured_products: Product[]
+  total_products: number
+  variations: Variation[]
+  add_ons: AddOn[]
 }
 
 export interface ProductFormData {
