@@ -1,150 +1,126 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { createServerSupabaseClient } from "@/lib/supabase"
+import { NextResponse } from "next/server"
 
-const ADMIN_API_KEY = "8frugfboO2fU0C_cEQLMtPXI3FmijRTYgLVvG-nmMrc"
+export const runtime = "nodejs"
 
-function validateApiKey(request: NextRequest): boolean {
-  const apiKey = request.headers.get("x-api-key")
-  return apiKey === ADMIN_API_KEY
-}
+// This would normally come from a database, but we'll use a simple in-memory store
+const mockProducts = [
+  {
+    id: "1",
+    name: "Espresso",
+    description: "Rich and bold espresso shot",
+    price: 89,
+    category: "ESPRESSO",
+    image_url: "/menu-espresso-updated.jpg",
+    is_active: true,
+    rating: 4.8,
+    prep_time: 2,
+    stock_quantity: 100,
+    variations: ["1", "4"],
+    add_ons: ["1", "2"],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "2",
+    name: "Latte",
+    description: "Espresso with steamed milk",
+    price: 109,
+    category: "ESPRESSO",
+    image_url: "/menu-espresso-updated.jpg",
+    is_active: true,
+    rating: 4.7,
+    prep_time: 3,
+    stock_quantity: 100,
+    variations: ["1", "2", "3", "4", "5"],
+    add_ons: ["1", "2", "3", "5"],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+]
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+/**
+ * PUT /api/admin/products/[id]
+ */
+export async function PUT(request: Request, { params }: { params: { id: string } }) {
+  const headers = { "Content-Type": "application/json" }
+
   try {
-    if (!validateApiKey(request)) {
-      return NextResponse.json({ error: "Unauthorized", details: "Invalid API key" }, { status: 401 })
-    }
-
+    const { id } = params
     const body = await request.json()
-    const productId = params.id
-    const supabase = createServerSupabaseClient()
+    console.log(`🔍 [/api/admin/products/${id}] Updating product:`, body)
 
-    console.log("Updating product:", productId, body)
-
-    // Find category ID by name if category is provided
-    let categoryId = body.category_id
-    if (body.category && !categoryId) {
-      const { data: category } = await supabase.from("categories").select("id").eq("name", body.category).single()
-      categoryId = category?.id
+    const productIndex = mockProducts.findIndex((p) => p.id === id)
+    if (productIndex === -1) {
+      return NextResponse.json(
+        {
+          error: "Product not found",
+        },
+        { headers, status: 404 },
+      )
     }
 
-    // Build update object with only the fields that exist in the current schema
-    const updateData: any = {
-      name: body.name,
-      description: body.description || "",
-      price: Number.parseFloat(body.price),
-      is_active: body.is_active !== false,
+    // Update the product
+    mockProducts[productIndex] = {
+      ...mockProducts[productIndex],
+      ...body,
       updated_at: new Date().toISOString(),
     }
 
-    // Only add category if we have a valid category_id
-    if (categoryId) {
-      updateData.category_id = categoryId
-    } else if (body.category) {
-      // If category is provided as a string, use it directly
-      updateData.category = body.category
-    }
-
-    // Add optional fields only if they exist in the request
-    if (body.image_url !== undefined) {
-      updateData.image_url = body.image_url || "/placeholder.svg?height=300&width=200"
-    }
-
-    if (body.stock_quantity !== undefined) {
-      updateData.stock_quantity = Number.parseInt(body.stock_quantity) || 0
-    }
-
-    if (body.tags !== undefined) {
-      updateData.tags = body.tags || []
-    }
-
-    const { data: product, error } = await supabase
-      .from("products")
-      .update(updateData)
-      .eq("id", productId)
-      .select()
-      .single()
-
-    if (error) {
-      console.error("Error updating product:", error)
-      return NextResponse.json({ error: "Failed to update product", details: error.message }, { status: 500 })
-    }
-
-    // Update variations if provided
-    if (body.variations !== undefined) {
-      // Delete existing variations
-      await supabase.from("product_variations").delete().eq("product_id", productId)
-
-      // Add new variations
-      if (body.variations.length > 0) {
-        const variationInserts = body.variations.map((varId: string) => ({
-          product_id: productId,
-          variation_id: varId,
-        }))
-
-        await supabase.from("product_variations").insert(variationInserts)
-      }
-    }
-
-    // Update add-ons if provided
-    if (body.add_ons !== undefined) {
-      // Delete existing add-ons
-      await supabase.from("product_add_ons").delete().eq("product_id", productId)
-
-      // Add new add-ons
-      if (body.add_ons.length > 0) {
-        const addOnInserts = body.add_ons.map((addOnId: string) => ({
-          product_id: productId,
-          add_on_id: addOnId,
-        }))
-
-        await supabase.from("product_add_ons").insert(addOnInserts)
-      }
-    }
-
-    console.log("Product updated successfully:", productId)
-    return NextResponse.json({ data: product })
+    return NextResponse.json(
+      {
+        data: mockProducts[productIndex],
+        message: "Product updated successfully",
+      },
+      { headers, status: 200 },
+    )
   } catch (err) {
-    console.error("Exception updating product:", err)
-    return NextResponse.json({ error: "Failed to update product" }, { status: 500 })
+    console.error(`❌ [/api/admin/products/${params.id}] Update error:`, err)
+    return NextResponse.json(
+      {
+        error: err instanceof Error ? err.message : "Failed to update product",
+      },
+      { headers, status: 500 },
+    )
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+/**
+ * DELETE /api/admin/products/[id]
+ */
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+  const headers = { "Content-Type": "application/json" }
+
   try {
-    if (!validateApiKey(request)) {
-      return NextResponse.json({ error: "Unauthorized", details: "Invalid API key" }, { status: 401 })
+    const { id } = params
+    console.log(`🔍 [/api/admin/products/${id}] Deleting product`)
+
+    const productIndex = mockProducts.findIndex((p) => p.id === id)
+    if (productIndex === -1) {
+      return NextResponse.json(
+        {
+          error: "Product not found",
+        },
+        { headers, status: 404 },
+      )
     }
 
-    const productId = params.id
-    const supabase = createServerSupabaseClient()
+    // Remove the product
+    const deletedProduct = mockProducts.splice(productIndex, 1)[0]
 
-    console.log("Deleting product:", productId)
-
-    // Delete related records first (only if tables exist)
-    try {
-      await supabase.from("product_variations").delete().eq("product_id", productId)
-    } catch (error) {
-      console.log("product_variations table might not exist:", error)
-    }
-
-    try {
-      await supabase.from("product_add_ons").delete().eq("product_id", productId)
-    } catch (error) {
-      console.log("product_add_ons table might not exist:", error)
-    }
-
-    // Delete the product
-    const { error } = await supabase.from("products").delete().eq("id", productId)
-
-    if (error) {
-      console.error("Error deleting product:", error)
-      return NextResponse.json({ error: "Failed to delete product", details: error.message }, { status: 500 })
-    }
-
-    console.log("Product deleted successfully:", productId)
-    return NextResponse.json({ success: true, message: "Product deleted successfully" })
+    return NextResponse.json(
+      {
+        data: deletedProduct,
+        message: "Product deleted successfully",
+      },
+      { headers, status: 200 },
+    )
   } catch (err) {
-    console.error("Exception deleting product:", err)
-    return NextResponse.json({ error: "Failed to delete product" }, { status: 500 })
+    console.error(`❌ [/api/admin/products/${params.id}] Delete error:`, err)
+    return NextResponse.json(
+      {
+        error: err instanceof Error ? err.message : "Failed to delete product",
+      },
+      { headers, status: 500 },
+    )
   }
 }

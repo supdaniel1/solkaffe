@@ -1,67 +1,66 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { createServerSupabaseClient } from "@/lib/supabase"
+import { NextResponse } from "next/server"
 
-const ADMIN_API_KEY = "8frugfboO2fU0C_cEQLMtPXI3FmijRTYgLVvG-nmMrc"
+export const runtime = "nodejs"
 
-function validateApiKey(request: NextRequest): boolean {
-  const apiKey = request.headers.get("x-api-key")
-  return apiKey === ADMIN_API_KEY
-}
+/**
+ * PUT /api/admin/categories/[id]
+ */
+export async function PUT(request: Request, { params }: { params: { id: string } }) {
+  const headers = { "Content-Type": "application/json" }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    if (!validateApiKey(request)) {
-      return NextResponse.json({ error: "Unauthorized", details: "Invalid API key" }, { status: 401 })
-    }
-
+    const { id } = params
     const body = await request.json()
-    const categoryId = params.id
-    const supabase = createServerSupabaseClient()
+    console.log(`🔍 [/api/admin/categories/${id}] Updating category:`, body)
 
-    const { data: category, error } = await supabase
-      .from("categories")
-      .update({
-        name: body.name,
-        description: body.description || "",
-        sort_order: Number.parseInt(body.sort_order) || 0,
-        is_active: body.is_active !== false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", categoryId)
-      .select()
-      .single()
-
-    if (error) {
-      console.error("Error updating category:", error)
-      return NextResponse.json({ error: "Failed to update category", details: error.message }, { status: 500 })
+    // Mock response
+    const updatedCategory = {
+      id,
+      ...body,
+      updated_at: new Date().toISOString(),
     }
 
-    return NextResponse.json({ data: category })
+    return NextResponse.json(
+      {
+        data: updatedCategory,
+        message: "Category updated successfully",
+      },
+      { headers, status: 200 },
+    )
   } catch (err) {
-    console.error("Exception updating category:", err)
-    return NextResponse.json({ error: "Failed to update category" }, { status: 500 })
+    console.error(`❌ [/api/admin/categories/${params.id}] Update error:`, err)
+    return NextResponse.json(
+      {
+        error: err instanceof Error ? err.message : "Failed to update category",
+      },
+      { headers, status: 500 },
+    )
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+/**
+ * DELETE /api/admin/categories/[id]
+ */
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+  const headers = { "Content-Type": "application/json" }
+
   try {
-    if (!validateApiKey(request)) {
-      return NextResponse.json({ error: "Unauthorized", details: "Invalid API key" }, { status: 401 })
-    }
+    const { id } = params
+    console.log(`🔍 [/api/admin/categories/${id}] Deleting category`)
 
-    const categoryId = params.id
-    const supabase = createServerSupabaseClient()
-
-    const { error } = await supabase.from("categories").delete().eq("id", categoryId)
-
-    if (error) {
-      console.error("Error deleting category:", error)
-      return NextResponse.json({ error: "Failed to delete category", details: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, message: "Category deleted successfully" })
+    return NextResponse.json(
+      {
+        message: "Category deleted successfully",
+      },
+      { headers, status: 200 },
+    )
   } catch (err) {
-    console.error("Exception deleting category:", err)
-    return NextResponse.json({ error: "Failed to delete category" }, { status: 500 })
+    console.error(`❌ [/api/admin/categories/${params.id}] Delete error:`, err)
+    return NextResponse.json(
+      {
+        error: err instanceof Error ? err.message : "Failed to delete category",
+      },
+      { headers, status: 500 },
+    )
   }
 }

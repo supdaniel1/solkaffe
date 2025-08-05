@@ -1,67 +1,91 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { createServerSupabaseClient } from "@/lib/supabase"
+import { NextResponse } from "next/server"
 
-const ADMIN_API_KEY = "8frugfboO2fU0C_cEQLMtPXI3FmijRTYgLVvG-nmMrc"
+export const runtime = "nodejs"
 
-function validateApiKey(request: NextRequest): boolean {
-  const apiKey = request.headers.get("x-api-key")
-  return apiKey === ADMIN_API_KEY
-}
+// Mock add-ons
+const mockAddOns = [
+  {
+    id: "1",
+    name: "Extra Shot",
+    description: "Additional espresso shot",
+    price: 15,
+    category: "coffee",
+    max_quantity: 3,
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "2",
+    name: "Vanilla Syrup",
+    description: "Sweet vanilla flavoring",
+    price: 10,
+    category: "syrup",
+    max_quantity: 2,
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "3",
+    name: "Caramel Syrup",
+    description: "Rich caramel flavoring",
+    price: 10,
+    category: "syrup",
+    max_quantity: 2,
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "4",
+    name: "Extra Foam",
+    description: "Additional milk foam",
+    price: 5,
+    category: "milk",
+    max_quantity: 1,
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "5",
+    name: "Oat Milk",
+    description: "Plant-based milk alternative",
+    price: 12,
+    category: "milk",
+    max_quantity: 1,
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+]
 
-export async function GET(request: NextRequest) {
+/**
+ * GET /api/admin/add-ons
+ */
+export async function GET() {
+  const headers = { "Content-Type": "application/json" }
+
   try {
-    if (!validateApiKey(request)) {
-      return NextResponse.json({ error: "Unauthorized", details: "Invalid API key" }, { status: 401 })
-    }
+    console.log("🔍 [/api/admin/add-ons] Returning mock add-ons")
 
-    const supabase = createServerSupabaseClient()
-
-    const { data: addOns, error } = await supabase.from("add_ons").select("*").order("category", { ascending: true })
-
-    if (error) {
-      console.error("Error fetching add-ons:", error)
-      return NextResponse.json({ error: "Failed to fetch add-ons", details: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ data: addOns || [] })
+    return NextResponse.json(
+      {
+        data: mockAddOns,
+        count: mockAddOns.length,
+        source: "mock",
+      },
+      { headers, status: 200 },
+    )
   } catch (err) {
-    console.error("Exception fetching add-ons:", err)
-    return NextResponse.json({ error: "Failed to fetch add-ons" }, { status: 500 })
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    if (!validateApiKey(request)) {
-      return NextResponse.json({ error: "Unauthorized", details: "Invalid API key" }, { status: 401 })
-    }
-
-    const body = await request.json()
-    const supabase = createServerSupabaseClient()
-
-    const { data: addOn, error } = await supabase
-      .from("add_ons")
-      .insert({
-        name: body.name,
-        description: body.description || "",
-        price: Number.parseFloat(body.price) || 0,
-        max_quantity: Number.parseInt(body.max_quantity) || 1,
-        category: body.category || "other",
-        is_active: body.is_active !== false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error("Error creating add-on:", error)
-      return NextResponse.json({ error: "Failed to create add-on", details: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ data: addOn })
-  } catch (err) {
-    console.error("Exception creating add-on:", err)
-    return NextResponse.json({ error: "Failed to create add-on" }, { status: 500 })
+    console.error("❌ [/api/admin/add-ons] Error:", err)
+    return NextResponse.json(
+      {
+        data: [],
+        error: err instanceof Error ? err.message : "Unknown error",
+      },
+      { headers, status: 500 },
+    )
   }
 }

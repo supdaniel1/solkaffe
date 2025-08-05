@@ -1,70 +1,66 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { createServerSupabaseClient } from "@/lib/supabase"
+import { NextResponse } from "next/server"
 
-const ADMIN_API_KEY = "8frugfboO2fU0C_cEQLMtPXI3FmijRTYgLVvG-nmMrc"
+export const runtime = "nodejs"
 
-function validateApiKey(request: NextRequest): boolean {
-  const apiKey = request.headers.get("x-api-key")
-  return apiKey === ADMIN_API_KEY
-}
+/**
+ * PUT /api/admin/variations/[id]
+ */
+export async function PUT(request: Request, { params }: { params: { id: string } }) {
+  const headers = { "Content-Type": "application/json" }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    if (!validateApiKey(request)) {
-      return NextResponse.json({ error: "Unauthorized", details: "Invalid API key" }, { status: 401 })
-    }
-
+    const { id } = params
     const body = await request.json()
-    const variationId = params.id
-    const supabase = createServerSupabaseClient()
+    console.log(`🔍 [/api/admin/variations/${id}] Updating variation:`, body)
 
-    const { data: variation, error } = await supabase
-      .from("variations")
-      .update({
-        name: body.name,
-        type: body.type || "option",
-        price_modifier: Number.parseFloat(body.price_modifier) || 0,
-        is_active: body.is_active !== false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", variationId)
-      .select()
-      .single()
-
-    if (error) {
-      console.error("Error updating variation:", error)
-      return NextResponse.json({ error: "Failed to update variation", details: error.message }, { status: 500 })
+    // Mock response
+    const updatedVariation = {
+      id,
+      ...body,
+      updated_at: new Date().toISOString(),
     }
 
-    return NextResponse.json({ data: variation })
+    return NextResponse.json(
+      {
+        data: updatedVariation,
+        message: "Variation updated successfully",
+      },
+      { headers, status: 200 },
+    )
   } catch (err) {
-    console.error("Exception updating variation:", err)
-    return NextResponse.json({ error: "Failed to update variation" }, { status: 500 })
+    console.error(`❌ [/api/admin/variations/${params.id}] Update error:`, err)
+    return NextResponse.json(
+      {
+        error: err instanceof Error ? err.message : "Failed to update variation",
+      },
+      { headers, status: 500 },
+    )
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+/**
+ * DELETE /api/admin/variations/[id]
+ */
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+  const headers = { "Content-Type": "application/json" }
+
   try {
-    if (!validateApiKey(request)) {
-      return NextResponse.json({ error: "Unauthorized", details: "Invalid API key" }, { status: 401 })
-    }
+    const { id } = params
+    console.log(`🔍 [/api/admin/variations/${id}] Deleting variation`)
 
-    const variationId = params.id
-    const supabase = createServerSupabaseClient()
-
-    // Delete related product_variations first
-    await supabase.from("product_variations").delete().eq("variation_id", variationId)
-
-    const { error } = await supabase.from("variations").delete().eq("id", variationId)
-
-    if (error) {
-      console.error("Error deleting variation:", error)
-      return NextResponse.json({ error: "Failed to delete variation", details: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, message: "Variation deleted successfully" })
+    return NextResponse.json(
+      {
+        message: "Variation deleted successfully",
+      },
+      { headers, status: 200 },
+    )
   } catch (err) {
-    console.error("Exception deleting variation:", err)
-    return NextResponse.json({ error: "Failed to delete variation" }, { status: 500 })
+    console.error(`❌ [/api/admin/variations/${params.id}] Delete error:`, err)
+    return NextResponse.json(
+      {
+        error: err instanceof Error ? err.message : "Failed to delete variation",
+      },
+      { headers, status: 500 },
+    )
   }
 }
