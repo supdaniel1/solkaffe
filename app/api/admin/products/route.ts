@@ -1,137 +1,126 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+import { createServerSupabaseClient } from "@/lib/supabase"
 
-export const runtime = "nodejs"
+const ADMIN_API_KEY = "8frugfboO2fU0C_cEQLMtPXI3FmijRTYgLVvG-nmMrc"
 
-// Mock products store
-const mockProducts = [
-  {
-    id: "1",
-    name: "Espresso",
-    description: "Rich and bold espresso shot",
-    price: 89,
-    category: "ESPRESSO",
-    image_url: "/menu-espresso-updated.jpg",
-    is_active: true,
-    rating: 4.8,
-    prep_time: 2,
-    stock_quantity: 100,
-    variations: ["1", "4"], // Small, Hot
-    add_ons: ["1", "2"], // Extra Shot, Vanilla Syrup
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    name: "Latte",
-    description: "Espresso with steamed milk",
-    price: 109,
-    category: "ESPRESSO",
-    image_url: "/menu-espresso-updated.jpg",
-    is_active: true,
-    rating: 4.7,
-    prep_time: 3,
-    stock_quantity: 100,
-    variations: ["1", "2", "3", "4", "5"], // All sizes and temperatures
-    add_ons: ["1", "2", "3", "5"], // Extra Shot, Vanilla, Caramel, Oat Milk
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "3",
-    name: "Frappuccino",
-    description: "Blended coffee drink with ice",
-    price: 129,
-    category: "COLD_DRINKS",
-    image_url: "/menu-frappucino-updated.jpg",
-    is_active: true,
-    rating: 4.6,
-    prep_time: 4,
-    stock_quantity: 100,
-    variations: ["2", "3"], // Medium, Large
-    add_ons: ["2", "3", "4"], // Vanilla, Caramel, Extra Foam
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "4",
-    name: "Matcha Latte",
-    description: "Premium matcha with steamed milk",
-    price: 119,
-    category: "TEA",
-    image_url: "/menu-matcha-updated.jpg",
-    is_active: true,
-    rating: 4.5,
-    prep_time: 3,
-    stock_quantity: 100,
-    variations: ["2", "4", "5"], // Medium, Hot, Iced
-    add_ons: ["2", "5"], // Vanilla Syrup, Oat Milk
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-]
+function validateApiKey(request: NextRequest): boolean {
+  const apiKey = request.headers.get("x-api-key")
+  return apiKey === ADMIN_API_KEY
+}
 
-/**
- * GET /api/admin/products
- */
-export async function GET() {
-  const headers = { "Content-Type": "application/json" }
-
+export async function GET(request: NextRequest) {
   try {
-    console.log("🔍 [/api/admin/products] Returning mock products")
+    if (!validateApiKey(request)) {
+      return NextResponse.json({ error: "Unauthorized", details: "Invalid API key" }, { status: 401 })
+    }
 
-    return NextResponse.json(
-      {
-        data: mockProducts,
-        count: mockProducts.length,
-        source: "mock",
-      },
-      { headers, status: 200 },
-    )
+    const supabase = createServerSupabaseClient()
+
+    const { data: products, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("Error fetching products:", error)
+      return NextResponse.json({ error: "Failed to fetch products", details: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ data: products || [] })
   } catch (err) {
-    console.error("❌ [/api/admin/products] Error:", err)
-    return NextResponse.json(
-      {
-        data: [],
-        error: err instanceof Error ? err.message : "Unknown error",
-      },
-      { headers, status: 500 },
-    )
+    console.error("Exception fetching products:", err)
+    return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 })
   }
 }
 
-/**
- * POST /api/admin/products
- */
-export async function POST(request: Request) {
-  const headers = { "Content-Type": "application/json" }
-
+export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    console.log("🔍 [/api/admin/products] Creating product:", body)
+    if (!validateApiKey(request)) {
+      return NextResponse.json({ error: "Unauthorized", details: "Invalid API key" }, { status: 401 })
+    }
 
-    const newProduct = {
-      id: (mockProducts.length + 1).toString(),
-      ...body,
+    const body = await request.json()
+    const supabase = createServerSupabaseClient()
+
+    console.log("Creating product:", body)
+
+    // Find category ID by name if category is provided
+    let categoryId = body.category_id
+    if (body.category && !categoryId) {
+      const { data: category } = await supabase.from("categories").select("id").eq("name", body.category).single()
+      categoryId = category?.id
+    }
+
+    // Build insert object with only the fields that exist in the current schema
+    const insertData: any = {
+      name: body.name,
+      description: body.description || "",
+      price: Number.parseFloat(body.price),
+      is_active: body.is_active !== false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
 
-    mockProducts.push(newProduct)
+    // Only add category if we have a valid category_id
+    if (categoryId) {
+      insertData.category_id = categoryId
+    } else if (body.category) {
+      // If category is provided as a string, use it directly
+      insertData.category = body.category
+    }
 
-    return NextResponse.json(
-      {
-        data: newProduct,
-        message: "Product created successfully",
-      },
-      { headers, status: 201 },
-    )
+    // Add optional fields only if they exist in the request
+    if (body.image_url !== undefined) {
+      insertData.image_url = body.image_url || "/placeholder.svg?height=300&width=200"
+    }
+
+    if (body.stock_quantity !== undefined) {
+      insertData.stock_quantity = Number.parseInt(body.stock_quantity) || 0
+    }
+
+    if (body.tags !== undefined) {
+      insertData.tags = body.tags || []
+    }
+
+    const { data: product, error } = await supabase.from("products").insert(insertData).select().single()
+
+    if (error) {
+      console.error("Error creating product:", error)
+      return NextResponse.json({ error: "Failed to create product", details: error.message }, { status: 500 })
+    }
+
+    // Add variations if provided
+    if (body.variations && body.variations.length > 0) {
+      try {
+        const variationInserts = body.variations.map((varId: string) => ({
+          product_id: product.id,
+          variation_id: varId,
+        }))
+
+        await supabase.from("product_variations").insert(variationInserts)
+      } catch (error) {
+        console.log("product_variations table might not exist:", error)
+      }
+    }
+
+    // Add add-ons if provided
+    if (body.add_ons && body.add_ons.length > 0) {
+      try {
+        const addOnInserts = body.add_ons.map((addOnId: string) => ({
+          product_id: product.id,
+          add_on_id: addOnId,
+        }))
+
+        await supabase.from("product_add_ons").insert(addOnInserts)
+      } catch (error) {
+        console.log("product_add_ons table might not exist:", error)
+      }
+    }
+
+    console.log("Product created successfully:", product.id)
+    return NextResponse.json({ data: product })
   } catch (err) {
-    console.error("❌ [/api/admin/products] Create error:", err)
-    return NextResponse.json(
-      {
-        error: err instanceof Error ? err.message : "Failed to create product",
-      },
-      { headers, status: 500 },
-    )
+    console.error("Exception creating product:", err)
+    return NextResponse.json({ error: "Failed to create product" }, { status: 500 })
   }
 }
