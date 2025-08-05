@@ -70,7 +70,7 @@ interface FormData {
   add_ons: string[]
 }
 
-export default function EnhancedMenuManagement() {
+export function EnhancedMenuManagement() {
   const { toast } = useToast()
 
   // State

@@ -5,37 +5,32 @@ import type { CartItem } from "@/lib/types"
 
 export function useEnhancedCart() {
   const [items, setItems] = useState<CartItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
 
   // Load cart from localStorage on mount
   useEffect(() => {
-    try {
-      const savedCart = localStorage.getItem("sol-kaffe-cart")
-      if (savedCart) {
+    const savedCart = localStorage.getItem("sol-kaffe-cart")
+    if (savedCart) {
+      try {
         setItems(JSON.parse(savedCart))
+      } catch (error) {
+        console.error("Error loading cart from localStorage:", error)
       }
-    } catch (error) {
-      console.error("Error loading cart from localStorage:", error)
-    } finally {
-      setIsLoading(false)
     }
   }, [])
 
   // Save cart to localStorage whenever items change
   useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem("sol-kaffe-cart", JSON.stringify(items))
-    }
-  }, [items, isLoading])
+    localStorage.setItem("sol-kaffe-cart", JSON.stringify(items))
+  }, [items])
 
-  const addToCart = (item: CartItem) => {
+  const addItem = (newItem: CartItem) => {
     setItems((prevItems) => {
-      // Check if exact same item exists (same variations and add-ons)
+      // Check if exact same item exists (same product, variations, and add-ons)
       const existingItemIndex = prevItems.findIndex(
-        (existingItem) =>
-          existingItem.id === item.id &&
-          JSON.stringify(existingItem.variations) === JSON.stringify(item.variations) &&
-          JSON.stringify(existingItem.add_ons) === JSON.stringify(item.add_ons),
+        (item) =>
+          item.product.id === newItem.product.id &&
+          JSON.stringify(item.selectedVariations) === JSON.stringify(newItem.selectedVariations) &&
+          JSON.stringify(item.selectedAddOns) === JSON.stringify(newItem.selectedAddOns),
       )
 
       if (existingItemIndex >= 0) {
@@ -43,24 +38,24 @@ export function useEnhancedCart() {
         const updatedItems = [...prevItems]
         updatedItems[existingItemIndex] = {
           ...updatedItems[existingItemIndex],
-          quantity: updatedItems[existingItemIndex].quantity + item.quantity,
-          total: updatedItems[existingItemIndex].total + item.total,
+          quantity: updatedItems[existingItemIndex].quantity + newItem.quantity,
+          total: updatedItems[existingItemIndex].total + newItem.total,
         }
         return updatedItems
       } else {
         // Add new item
-        return [...prevItems, item]
+        return [...prevItems, newItem]
       }
     })
   }
 
-  const removeFromCart = (itemId: string) => {
+  const removeItem = (itemId: string) => {
     setItems((prevItems) => prevItems.filter((item) => item.id !== itemId))
   }
 
-  const updateQuantity = (itemId: string, quantity: number) => {
+  const updateItemQuantity = (itemId: string, quantity: number) => {
     if (quantity <= 0) {
-      removeFromCart(itemId)
+      removeItem(itemId)
       return
     }
 
@@ -83,36 +78,36 @@ export function useEnhancedCart() {
     setItems([])
   }
 
-  const getItemCount = () => {
-    return items.reduce((total, item) => total + item.quantity, 0)
-  }
-
-  const getCartTotal = () => {
+  const getTotalPrice = () => {
     return items.reduce((total, item) => total + item.total, 0)
   }
 
-  const getCartSummary = () => {
-    const itemCount = getItemCount()
-    const total = getCartTotal()
-    const uniqueItems = items.length
+  const getTotalItems = () => {
+    return items.reduce((total, item) => total + item.quantity, 0)
+  }
 
-    return {
-      itemCount,
-      uniqueItems,
-      total,
-      isEmpty: items.length === 0,
-    }
+  const getItemsByCategory = () => {
+    const categories: { [key: string]: CartItem[] } = {}
+
+    items.forEach((item) => {
+      const categoryName = item.product.main_category?.name || "Other"
+      if (!categories[categoryName]) {
+        categories[categoryName] = []
+      }
+      categories[categoryName].push(item)
+    })
+
+    return categories
   }
 
   return {
     items,
-    isLoading,
-    addToCart,
-    removeFromCart,
-    updateQuantity,
+    addItem,
+    removeItem,
+    updateItemQuantity,
     clearCart,
-    getItemCount,
-    getCartTotal,
-    getCartSummary,
+    getTotalPrice,
+    getTotalItems,
+    getItemsByCategory,
   }
 }

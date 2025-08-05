@@ -4,7 +4,6 @@ export interface MainCategory {
   id: string
   name: string
   description?: string
-  icon?: string
   display_order: number
   is_active: boolean
   created_at: string
@@ -14,32 +13,35 @@ export interface MainCategory {
 
 export interface Subcategory {
   id: string
+  main_category_id: string
   name: string
   description?: string
-  main_category_id: string
   display_order: number
   is_active: boolean
   created_at: string
   updated_at: string
+  main_category?: MainCategory
   products?: Product[]
 }
 
 export interface Product {
   id: string
   name: string
-  description: string
+  description?: string
   price: number
-  image_url?: string
   main_category_id: string
-  subcategory_id: string
+  subcategory_id?: string
+  image_url?: string
   is_active: boolean
   is_featured: boolean
-  rating: number
-  prep_time: number
-  stock_quantity: number
+  rating?: number
+  prep_time?: number
+  stock_quantity?: number
   tags?: string[]
   created_at: string
   updated_at: string
+  main_category?: MainCategory
+  subcategory?: Subcategory
   variations?: Variation[]
   add_ons?: AddOn[]
 }
@@ -51,7 +53,6 @@ export interface Variation {
   price_modifier: number
   is_active: boolean
   created_at: string
-  updated_at: string
 }
 
 export interface AddOn {
@@ -63,27 +64,50 @@ export interface AddOn {
   max_quantity: number
   is_active: boolean
   created_at: string
-  updated_at: string
 }
 
 export interface CartItem {
   id: string
-  name: string
-  price: number
+  product: Product
   quantity: number
-  image_url?: string
-  variations?: { id: string; name: string; price_modifier: number }[]
-  add_ons?: { id: string; name: string; price: number; quantity: number }[]
+  selectedVariations: Variation[]
+  selectedAddOns: { addOn: AddOn; quantity: number }[]
   total: number
+  notes?: string
 }
 
-export interface Order {
-  id: string
-  customer_name?: string
-  total: number
-  status: "pending" | "preparing" | "ready" | "completed" | "cancelled"
-  payment_method: string
-  items: CartItem[]
-  created_at: string
-  updated_at: string
+export interface MenuStructure {
+  main_categories: MainCategory[]
+  total_products: number
+  featured_products: Product[]
+}
+
+export interface ProductFormData {
+  name: string
+  description: string
+  price: number
+  main_category_id: string
+  subcategory_id: string
+  image_url: string
+  is_active: boolean
+  is_featured: boolean
+  rating?: number
+  prep_time?: number
+  stock_quantity?: number
+  tags: string[]
+  variation_ids: string[]
+  add_on_ids: string[]
+}
+
+export interface ImageUploadResponse {
+  success: boolean
+  url?: string
+  error?: string
+}
+
+export interface ApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+  message?: string
 }

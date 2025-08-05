@@ -2,193 +2,300 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import {
-  Plus,
-  Edit,
-  Trash2,
-  Save,
-  X,
-  Upload,
-  ImageIcon,
-  Star,
-  Clock,
-  Package,
-  Coffee,
-  UtensilsCrossed,
-  Search,
-  Eye,
-  EyeOff,
-  ArrowLeft,
-} from "lucide-react"
+import { Plus, Search, Edit, Trash2, Upload, X, Star, Clock, Package, Eye, EyeOff, Save, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { useAdminAuth } from "@/hooks/use-admin-auth"
 import Image from "next/image"
-import Link from "next/link"
-import type { MainCategory, Product, Variation, AddOn } from "@/lib/types"
+import type { MainCategory, Subcategory, Product, Variation, AddOn, ProductFormData } from "@/lib/types"
 
 interface MenuEditorState {
-  menuStructure: { main_categories: MainCategory[]; variations: Variation[]; add_ons: AddOn[] } | null
+  products: Product[]
+  mainCategories: MainCategory[]
+  subcategories: Subcategory[]
+  variations: Variation[]
+  addOns: AddOn[]
   loading: boolean
-  searchTerm: string
-  selectedMainCategory: string
-  selectedSubcategory: string
-  showInactiveOnly: boolean
-  editingProduct: Product | null
-  isModalOpen: boolean
+  error: string | null
 }
 
 export default function MenuEditorPage() {
   const { toast } = useToast()
-  const { isAuthenticated, loading: authLoading } = useAdminAuth()
 
+  // State
   const [state, setState] = useState<MenuEditorState>({
-    menuStructure: null,
+    products: [],
+    mainCategories: [],
+    subcategories: [],
+    variations: [],
+    addOns: [],
     loading: true,
-    searchTerm: "",
-    selectedMainCategory: "1",
-    selectedSubcategory: "1",
-    showInactiveOnly: false,
-    editingProduct: null,
-    isModalOpen: false,
+    error: null,
   })
 
-  const [formData, setFormData] = useState<Partial<Product>>({
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedMainCategory, setSelectedMainCategory] = useState<string>("all")
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string>("all")
+  const [showActiveOnly, setShowActiveOnly] = useState(true)
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [imageUploading, setImageUploading] = useState(false)
+
+  // Form state
+  const [formData, setFormData] = useState<ProductFormData>({
     name: "",
     description: "",
     price: 0,
+    main_category_id: "",
+    subcategory_id: "",
     image_url: "",
     is_active: true,
     is_featured: false,
-    rating: 4.5,
-    prep_time: 5,
-    stock_quantity: 100,
+    rating: undefined,
+    prep_time: undefined,
+    stock_quantity: undefined,
     tags: [],
+    variation_ids: [],
+    add_on_ids: [],
   })
 
-  const [imagePreview, setImagePreview] = useState<string>("")
-  const [uploadingImage, setUploadingImage] = useState(false)
-
-  // Load menu structure
+  // Load all data
   useEffect(() => {
-    if (isAuthenticated) {
-      loadMenuStructure()
-    }
-  }, [isAuthenticated])
+    loadAllData()
+  }, [])
 
-  const loadMenuStructure = async () => {
+  const loadAllData = async () => {
+    setState((prev) => ({ ...prev, loading: true, error: null }))
+
     try {
-      setState((prev) => ({ ...prev, loading: true }))
-      const response = await fetch("/api/menu/structure")
-      const data = await response.json()
-      setState((prev) => ({ ...prev, menuStructure: data.data, loading: false }))
+      await Promise.all([loadProducts(), loadMainCategories(), loadSubcategories(), loadVariations(), loadAddOns()])
     } catch (error) {
-      console.error("Error loading menu structure:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load menu structure",
-        variant: "destructive",
-      })
+      console.error("Error loading data:", error)
+      setState((prev) => ({
+        ...prev,
+        error: "Failed to load menu data. Please refresh the page.",
+      }))
+    } finally {
       setState((prev) => ({ ...prev, loading: false }))
     }
   }
 
-  const handleImageUpload = async (file: File) => {
-    if (!file) return
-
-    setUploadingImage(true)
+  const loadProducts = async () => {
     try {
-      // In a real app, you would upload to a cloud service like Cloudinary or AWS S3
-      // For now, we'll create a local URL
-      const imageUrl = URL.createObjectURL(file)
-      setImagePreview(imageUrl)
-      setFormData((prev) => ({ ...prev, image_url: imageUrl }))
-
-      toast({
-        title: "Image uploaded",
-        description: "Image has been uploaded successfully",
-      })
+      const response = await fetch("/api/admin/products")
+      if (response.ok) {
+        const data = await response.json()
+        setState((prev) => ({ ...prev, products: data.data || [] }))
+      }
     } catch (error) {
-      toast({
-        title: "Upload failed",
-        description: "Failed to upload image",
-        variant: "destructive",
-      })
-    } finally {
-      setUploadingImage(false)
+      console.error("Error loading products:", error)
     }
   }
 
+  const loadMainCategories = async () => {
+    try {
+      const response = await fetch("/api/menu/structure")
+      if (response.ok) {
+        const data = await response.json()
+        setState((prev) => ({ ...prev, mainCategories: data.main_categories || [] }))
+      }
+    } catch (error) {
+      console.error("Error loading main categories:", error)
+    }
+  }
+
+  const loadSubcategories = async () => {
+    try {
+      const response = await fetch("/api/admin/categories")
+      if (response.ok) {
+        const data = await response.json()
+        // Assuming subcategories are returned from this endpoint
+        setState((prev) => ({ ...prev, subcategories: data.data || [] }))
+      }
+    } catch (error) {
+      console.error("Error loading subcategories:", error)
+    }
+  }
+
+  const loadVariations = async () => {
+    try {
+      const response = await fetch("/api/admin/variations")
+      if (response.ok) {
+        const data = await response.json()
+        setState((prev) => ({ ...prev, variations: data.data || [] }))
+      }
+    } catch (error) {
+      console.error("Error loading variations:", error)
+    }
+  }
+
+  const loadAddOns = async () => {
+    try {
+      const response = await fetch("/api/admin/add-ons")
+      if (response.ok) {
+        const data = await response.json()
+        setState((prev) => ({ ...prev, addOns: data.data || [] }))
+      }
+    } catch (error) {
+      console.error("Error loading add-ons:", error)
+    }
+  }
+
+  // Filter products
+  const filteredProducts = state.products.filter((product) => {
+    const matchesSearch =
+      !searchQuery ||
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.tags?.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+
+    const matchesMainCategory = !selectedMainCategory || product.main_category_id === selectedMainCategory
+    const matchesSubcategory = !selectedSubcategory || product.subcategory_id === selectedSubcategory
+    const matchesActive = !showActiveOnly || product.is_active
+
+    return matchesSearch && matchesMainCategory && matchesSubcategory && matchesActive
+  })
+
+  // Get filtered subcategories based on selected main category
+  const filteredSubcategories = selectedMainCategory
+    ? state.subcategories.filter((sub) => sub.main_category_id === selectedMainCategory)
+    : state.subcategories
+
+  // Modal handlers
   const openProductModal = (product?: Product) => {
     if (product) {
-      setState((prev) => ({ ...prev, editingProduct: product, isModalOpen: true }))
+      setEditingProduct(product)
       setFormData({
-        ...product,
+        name: product.name,
+        description: product.description || "",
+        price: product.price,
+        main_category_id: product.main_category_id,
+        subcategory_id: product.subcategory_id || "",
+        image_url: product.image_url || "",
+        is_active: product.is_active,
+        is_featured: product.is_featured,
+        rating: product.rating,
+        prep_time: product.prep_time,
+        stock_quantity: product.stock_quantity,
         tags: product.tags || [],
+        variation_ids: [], // Would need to load from junction table
+        add_on_ids: [], // Would need to load from junction table
       })
-      setImagePreview(product.image_url || "")
     } else {
-      setState((prev) => ({ ...prev, editingProduct: null, isModalOpen: true }))
+      setEditingProduct(null)
       setFormData({
         name: "",
         description: "",
         price: 0,
+        main_category_id: "",
+        subcategory_id: "",
         image_url: "",
-        main_category_id: state.selectedMainCategory,
-        subcategory_id: state.selectedSubcategory,
         is_active: true,
         is_featured: false,
-        rating: 4.5,
-        prep_time: 5,
-        stock_quantity: 100,
+        rating: undefined,
+        prep_time: undefined,
+        stock_quantity: undefined,
         tags: [],
+        variation_ids: [],
+        add_on_ids: [],
       })
-      setImagePreview("")
+    }
+    setIsProductModalOpen(true)
+  }
+
+  const handleImageUpload = async (file: File) => {
+    setImageUploading(true)
+
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setFormData((prev) => ({ ...prev, image_url: data.url }))
+        toast({
+          title: "Success",
+          description: "Image uploaded successfully",
+        })
+      } else {
+        throw new Error("Upload failed")
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error)
+      toast({
+        title: "Error",
+        description: "Failed to upload image",
+        variant: "destructive",
+      })
+    } finally {
+      setImageUploading(false)
     }
   }
 
   const handleSaveProduct = async () => {
     try {
-      // In a real app, this would make an API call to save the product
-      toast({
-        title: "Success",
-        description: `Product ${state.editingProduct ? "updated" : "created"} successfully`,
+      const url = editingProduct ? `/api/admin/products/${editingProduct.id}` : "/api/admin/products"
+
+      const method = editingProduct ? "PUT" : "POST"
+
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
       })
-      setState((prev) => ({ ...prev, isModalOpen: false, editingProduct: null }))
-      setFormData({})
-      setImagePreview("")
-      // Reload menu structure
-      loadMenuStructure()
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: `Product ${editingProduct ? "updated" : "created"} successfully`,
+        })
+        setIsProductModalOpen(false)
+        loadProducts()
+      } else {
+        const error = await response.json()
+        throw new Error(error.message || "Failed to save product")
+      }
     } catch (error) {
+      console.error("Error saving product:", error)
       toast({
         title: "Error",
-        description: "Failed to save product",
+        description: error instanceof Error ? error.message : "Failed to save product",
         variant: "destructive",
       })
     }
   }
 
-  const handleDeleteProduct = async (productId: string, productName: string) => {
-    if (!confirm(`Are you sure you want to delete "${productName}"? This action cannot be undone.`)) {
-      return
-    }
+  const handleDeleteProduct = async (productId: string) => {
+    if (!confirm("Are you sure you want to delete this product?")) return
 
     try {
-      // In a real app, this would make an API call to delete the product
-      toast({
-        title: "Success",
-        description: `"${productName}" has been deleted successfully`,
+      const response = await fetch(`/api/admin/products/${productId}`, {
+        method: "DELETE",
       })
-      // Reload menu structure
-      loadMenuStructure()
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Product deleted successfully",
+        })
+        loadProducts()
+      } else {
+        throw new Error("Failed to delete product")
+      }
     } catch (error) {
+      console.error("Error deleting product:", error)
       toast({
         title: "Error",
         description: "Failed to delete product",
@@ -197,63 +304,31 @@ export default function MenuEditorPage() {
     }
   }
 
-  const toggleProductStatus = async (product: Product) => {
+  const handleToggleProductStatus = async (productId: string, isActive: boolean) => {
     try {
-      // In a real app, this would make an API call to toggle the product status
-      toast({
-        title: "Success",
-        description: `${product.name} is now ${!product.is_active ? "active" : "inactive"}`,
+      const response = await fetch(`/api/admin/products/${productId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: !isActive }),
       })
-      // Reload menu structure
-      loadMenuStructure()
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: `Product ${!isActive ? "activated" : "deactivated"}`,
+        })
+        loadProducts()
+      } else {
+        throw new Error("Failed to update product status")
+      }
     } catch (error) {
+      console.error("Error updating product status:", error)
       toast({
         title: "Error",
         description: "Failed to update product status",
         variant: "destructive",
       })
     }
-  }
-
-  // Get current data
-  const currentMainCategory = state.menuStructure?.main_categories.find((cat) => cat.id === state.selectedMainCategory)
-  const currentSubcategory = currentMainCategory?.subcategories?.find((sub) => sub.id === state.selectedSubcategory)
-
-  // Filter products
-  const filteredProducts =
-    currentSubcategory?.products?.filter((product) => {
-      const matchesSearch =
-        product.name.toLowerCase().includes(state.searchTerm.toLowerCase()) ||
-        product.description.toLowerCase().includes(state.searchTerm.toLowerCase())
-      const matchesStatus = state.showInactiveOnly ? !product.is_active : product.is_active
-      return matchesSearch && matchesStatus
-    }) || []
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="p-6 text-center">
-            <h2 className="text-xl font-semibold mb-4">Access Denied</h2>
-            <p className="text-gray-600 mb-4">You need to be logged in as an admin to access this page.</p>
-            <Link href="/admin">
-              <Button>Go to Admin Login</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    )
   }
 
   if (state.loading) {
@@ -267,64 +342,73 @@ export default function MenuEditorPage() {
     )
   }
 
+  if (state.error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{state.error}</p>
+          <Button onClick={loadAllData}>Retry</Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/admin">
-              <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
+      <header className="bg-white shadow-sm sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => (window.location.href = "/admin")}
+                className="text-gray-600 hover:text-gray-900"
+              >
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to Admin
               </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Menu Editor</h1>
-              <p className="text-gray-600">Manage your menu items, categories, and pricing</p>
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">Menu Editor</h1>
+                <p className="text-sm text-gray-500">
+                  {filteredProducts.length} of {state.products.length} products
+                </p>
+              </div>
             </div>
+
+            <Button onClick={() => openProductModal()}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Product
+            </Button>
           </div>
-          <Button onClick={() => openProductModal()} className="bg-gray-900 hover:bg-gray-800 text-white rounded-xl">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Product
-          </Button>
         </div>
       </header>
 
-      <div className="p-6">
-        {/* Controls */}
-        <Card className="mb-6">
-          <CardContent className="p-6">
-            <div className="flex flex-col lg:flex-row gap-4">
-              {/* Search */}
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Search products..."
-                  value={state.searchTerm}
-                  onChange={(e) => setState((prev) => ({ ...prev, searchTerm: e.target.value }))}
-                  className="pl-10 border-gray-200 rounded-xl"
-                />
-              </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Filters */}
+        <div className="mb-8 space-y-4">
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Input
+                placeholder="Search products..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
 
-              {/* Category Selection */}
-              <Select
-                value={state.selectedMainCategory}
-                onValueChange={(value) => {
-                  setState((prev) => ({ ...prev, selectedMainCategory: value }))
-                  // Set first subcategory as default
-                  const category = state.menuStructure?.main_categories.find((cat) => cat.id === value)
-                  const firstSubcategory = category?.subcategories?.[0]
-                  if (firstSubcategory) {
-                    setState((prev) => ({ ...prev, selectedSubcategory: firstSubcategory.id }))
-                  }
-                }}
-              >
-                <SelectTrigger className="w-48 border-gray-200 rounded-xl">
-                  <SelectValue placeholder="Select category" />
+            {/* Category Filters */}
+            <div className="flex gap-4">
+              <Select value={selectedMainCategory} onValueChange={setSelectedMainCategory}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  {state.menuStructure?.main_categories.map((category) => (
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {state.mainCategories.map((category) => (
                     <SelectItem key={category.id} value={category.id}>
                       {category.name}
                     </SelectItem>
@@ -332,518 +416,449 @@ export default function MenuEditorPage() {
                 </SelectContent>
               </Select>
 
-              {/* Subcategory Selection */}
               <Select
-                value={state.selectedSubcategory}
-                onValueChange={(value) => setState((prev) => ({ ...prev, selectedSubcategory: value }))}
+                value={selectedSubcategory}
+                onValueChange={setSelectedSubcategory}
+                disabled={!selectedMainCategory || selectedMainCategory === "all"}
               >
-                <SelectTrigger className="w-48 border-gray-200 rounded-xl">
-                  <SelectValue placeholder="Select subcategory" />
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="All Subcategories" />
                 </SelectTrigger>
                 <SelectContent>
-                  {currentMainCategory?.subcategories?.map((subcategory) => (
+                  <SelectItem value="all">All Subcategories</SelectItem>
+                  {filteredSubcategories.map((subcategory) => (
                     <SelectItem key={subcategory.id} value={subcategory.id}>
                       {subcategory.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-
-              {/* Status Filter */}
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="show-inactive"
-                  checked={state.showInactiveOnly}
-                  onCheckedChange={(checked) => setState((prev) => ({ ...prev, showInactiveOnly: checked }))}
-                />
-                <Label htmlFor="show-inactive" className="text-sm">
-                  Show inactive
-                </Label>
-              </div>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Current Category Info */}
-        <div className="mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            {state.selectedMainCategory === "1" ? (
-              <Coffee className="w-6 h-6 text-gray-600" />
-            ) : (
-              <UtensilsCrossed className="w-6 h-6 text-gray-600" />
-            )}
-            <h2 className="text-xl font-semibold text-gray-900">
-              {currentMainCategory?.name} → {currentSubcategory?.name}
-            </h2>
+            {/* Active Toggle */}
+            <div className="flex items-center space-x-2">
+              <Switch id="active-only" checked={showActiveOnly} onCheckedChange={setShowActiveOnly} />
+              <Label htmlFor="active-only" className="text-sm whitespace-nowrap">
+                Active only
+              </Label>
+            </div>
           </div>
-          <p className="text-gray-600">{currentSubcategory?.description}</p>
         </div>
 
         {/* Products Grid */}
-        {filteredProducts.length === 0 ? (
-          <Card>
-            <CardContent className="p-12 text-center">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Package className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {state.searchTerm ? "No products found" : "No products in this category"}
-              </h3>
-              <p className="text-gray-600 mb-4">
-                {state.searchTerm
-                  ? "Try adjusting your search terms or filters"
-                  : "Get started by adding your first product to this category"}
-              </p>
-              <Button
-                onClick={() => openProductModal()}
-                className="bg-gray-900 hover:bg-gray-800 text-white rounded-xl"
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <AnimatePresence>
+            {filteredProducts.map((product) => (
+              <motion.div
+                key={product.id}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.2 }}
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Product
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            <AnimatePresence>
-              {filteredProducts.map((product) => (
-                <motion.div
-                  key={product.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  className="group"
-                >
-                  <Card className="overflow-hidden hover:shadow-lg transition-shadow">
-                    <div className="relative h-48 bg-gray-50">
-                      {product.image_url ? (
-                        <Image
-                          src={product.image_url || "/placeholder.svg"}
-                          alt={product.name}
-                          fill
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <ImageIcon className="w-12 h-12 text-gray-300" />
-                        </div>
-                      )}
+                <Card className="group hover:shadow-lg transition-shadow">
+                  <CardContent className="p-0">
+                    {/* Product Image */}
+                    <div className="aspect-video relative overflow-hidden rounded-t-lg">
+                      <Image
+                        src={product.image_url || "/placeholder.svg?height=200&width=300&query=product image"}
+                        alt={product.name}
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-200"
+                      />
 
                       {/* Status Badges */}
-                      <div className="absolute top-3 left-3 flex gap-2">
-                        {product.is_featured && <Badge className="bg-orange-500 text-white text-xs">Featured</Badge>}
-                        <Badge
-                          variant={product.is_active ? "default" : "secondary"}
-                          className={`text-xs ${
-                            product.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {product.is_active ? "Active" : "Inactive"}
-                        </Badge>
+                      <div className="absolute top-2 left-2 flex gap-1">
+                        {product.is_featured && <Badge className="bg-orange-500">Featured</Badge>}
+                        {!product.is_active && <Badge variant="secondary">Inactive</Badge>}
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => toggleProductStatus(product)}
-                          className="rounded-full w-8 h-8 p-0 bg-white/90 hover:bg-white"
-                        >
-                          {product.is_active ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                        </Button>
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                         <Button
                           size="sm"
                           variant="secondary"
                           onClick={() => openProductModal(product)}
-                          className="rounded-full w-8 h-8 p-0 bg-white/90 hover:bg-white"
+                          className="h-8 w-8 p-0"
                         >
                           <Edit className="w-3 h-3" />
                         </Button>
                         <Button
                           size="sm"
                           variant="secondary"
-                          onClick={() => handleDeleteProduct(product.id, product.name)}
-                          className="rounded-full w-8 h-8 p-0 bg-white/90 hover:bg-white text-red-600 hover:text-red-700"
+                          onClick={() => handleToggleProductStatus(product.id, product.is_active)}
+                          className="h-8 w-8 p-0"
+                        >
+                          {product.is_active ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleDeleteProduct(product.id)}
+                          className="h-8 w-8 p-0"
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>
                     </div>
 
-                    <CardContent className="p-4">
+                    {/* Product Info */}
+                    <div className="p-4">
                       <div className="flex items-start justify-between mb-2">
-                        <h3 className="font-semibold text-gray-900 text-sm leading-tight">{product.name}</h3>
-                        <span className="text-lg font-bold text-gray-900">₱{product.price.toFixed(2)}</span>
+                        <h3 className="font-semibold text-gray-900 line-clamp-1 flex-1">{product.name}</h3>
+                        <div className="text-lg font-bold text-gray-900 ml-2">₱{product.price.toFixed(2)}</div>
                       </div>
 
-                      <p className="text-xs text-gray-600 mb-3 line-clamp-2">{product.description}</p>
+                      <p className="text-sm text-gray-600 mb-3 line-clamp-2">{product.description}</p>
 
-                      <div className="flex items-center justify-between text-xs text-gray-500">
-                        <div className="flex items-center gap-1">
-                          <Star className="w-3 h-3 fill-orange-400 text-orange-400" />
-                          <span>{product.rating.toFixed(1)}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          <span>{product.prep_time}min</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Package className="w-3 h-3" />
-                          <span>{product.stock_quantity}</span>
+                      {/* Product Stats */}
+                      <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+                        <div className="flex items-center gap-3">
+                          {product.rating && (
+                            <div className="flex items-center gap-1">
+                              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                              <span>{product.rating}</span>
+                            </div>
+                          )}
+                          {product.prep_time && (
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              <span>{product.prep_time}m</span>
+                            </div>
+                          )}
+                          {product.stock_quantity !== undefined && (
+                            <div className="flex items-center gap-1">
+                              <Package className="w-3 h-3" />
+                              <span>{product.stock_quantity}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
+                      {/* Tags */}
                       {product.tags && product.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-3">
-                          {product.tags.slice(0, 3).map((tag, index) => (
-                            <Badge key={index} variant="outline" className="text-xs px-2 py-0">
+                        <div className="flex gap-1 flex-wrap">
+                          {product.tags.slice(0, 2).map((tag) => (
+                            <Badge key={tag} variant="secondary" className="text-xs">
                               {tag}
                             </Badge>
                           ))}
-                          {product.tags.length > 3 && (
-                            <Badge variant="outline" className="text-xs px-2 py-0">
-                              +{product.tags.length - 3}
+                          {product.tags.length > 2 && (
+                            <Badge variant="secondary" className="text-xs">
+                              +{product.tags.length - 2}
                             </Badge>
                           )}
                         </div>
                       )}
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+
+        {/* No Results */}
+        {filteredProducts.length === 0 && (
+          <div className="text-center py-16">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Package className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
+            <p className="text-gray-500 mb-4">
+              {searchQuery ? `No products match "${searchQuery}"` : "No products match your current filters"}
+            </p>
+            <Button onClick={() => openProductModal()}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add First Product
+            </Button>
           </div>
         )}
       </div>
 
       {/* Product Modal */}
-      <AnimatePresence>
-        {state.isModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-            onClick={() => setState((prev) => ({ ...prev, isModalOpen: false }))}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6">
-                {/* Modal Header */}
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {state.editingProduct ? "Edit Product" : "Add New Product"}
-                  </h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setState((prev) => ({ ...prev, isModalOpen: false }))}
-                    className="text-gray-400 hover:text-gray-600 rounded-full"
-                  >
-                    <X className="w-5 h-5" />
-                  </Button>
+      <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingProduct ? "Edit Product" : "Add New Product"}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Basic Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Product Name *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder="Enter product name"
+                  />
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Left Column - Image Upload */}
-                  <div className="space-y-6">
-                    <div>
-                      <Label className="text-base font-medium mb-4 block">Product Image</Label>
-                      <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-gray-400 transition-colors">
-                        {imagePreview ? (
-                          <div className="relative">
-                            <Image
-                              src={imagePreview || "/placeholder.svg"}
-                              alt="Product preview"
-                              width={300}
-                              height={200}
-                              className="mx-auto rounded-lg object-cover"
-                            />
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => {
-                                setImagePreview("")
-                                setFormData((prev) => ({ ...prev, image_url: "" }))
-                              }}
-                              className="absolute top-2 right-2 rounded-full w-8 h-8 p-0"
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div>
-                            <ImageIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                            <p className="text-gray-600 mb-4">Drag and drop an image here, or click to select</p>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0]
-                                if (file) handleImageUpload(file)
-                              }}
-                              className="hidden"
-                              id="image-upload"
-                            />
-                            <label htmlFor="image-upload">
-                              <Button
-                                variant="outline"
-                                className="cursor-pointer bg-transparent"
-                                disabled={uploadingImage}
-                              >
-                                <Upload className="w-4 h-4 mr-2" />
-                                {uploadingImage ? "Uploading..." : "Choose Image"}
-                              </Button>
-                            </label>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Quick Stats */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="rating">Rating</Label>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Star className="w-4 h-4 fill-orange-400 text-orange-400" />
-                          <Input
-                            id="rating"
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="5"
-                            value={formData.rating || ""}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                rating: Number.parseFloat(e.target.value) || 0,
-                              }))
-                            }
-                            className="border-gray-200 rounded-xl"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <Label htmlFor="prep_time">Prep Time (min)</Label>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Clock className="w-4 h-4 text-gray-400" />
-                          <Input
-                            id="prep_time"
-                            type="number"
-                            min="1"
-                            value={formData.prep_time || ""}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                prep_time: Number.parseInt(e.target.value) || 0,
-                              }))
-                            }
-                            className="border-gray-200 rounded-xl"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Column - Product Details */}
-                  <div className="space-y-6">
-                    {/* Basic Information */}
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="name">Product Name</Label>
-                        <Input
-                          id="name"
-                          value={formData.name || ""}
-                          onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                          placeholder="Enter product name"
-                          className="border-gray-200 rounded-xl"
-                        />
-                      </div>
-
-                      <div>
-                        <Label htmlFor="description">Description</Label>
-                        <Textarea
-                          id="description"
-                          value={formData.description || ""}
-                          onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                          placeholder="Describe your product"
-                          rows={3}
-                          className="border-gray-200 rounded-xl"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="price">Price (₱)</Label>
-                          <Input
-                            id="price"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={formData.price || ""}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                price: Number.parseFloat(e.target.value) || 0,
-                              }))
-                            }
-                            placeholder="0.00"
-                            className="border-gray-200 rounded-xl"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="stock_quantity">Stock Quantity</Label>
-                          <Input
-                            id="stock_quantity"
-                            type="number"
-                            min="0"
-                            value={formData.stock_quantity || ""}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                stock_quantity: Number.parseInt(e.target.value) || 0,
-                              }))
-                            }
-                            placeholder="100"
-                            className="border-gray-200 rounded-xl"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Category Selection */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Main Category</Label>
-                        <Select
-                          value={formData.main_category_id || state.selectedMainCategory}
-                          onValueChange={(value) =>
-                            setFormData((prev) => ({
-                              ...prev,
-                              main_category_id: value,
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="border-gray-200 rounded-xl">
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {state.menuStructure?.main_categories.map((category) => (
-                              <SelectItem key={category.id} value={category.id}>
-                                {category.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label>Subcategory</Label>
-                        <Select
-                          value={formData.subcategory_id || state.selectedSubcategory}
-                          onValueChange={(value) =>
-                            setFormData((prev) => ({
-                              ...prev,
-                              subcategory_id: value,
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="border-gray-200 rounded-xl">
-                            <SelectValue placeholder="Select subcategory" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {currentMainCategory?.subcategories?.map((subcategory) => (
-                              <SelectItem key={subcategory.id} value={subcategory.id}>
-                                {subcategory.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {/* Tags */}
-                    <div>
-                      <Label htmlFor="tags">Tags (comma-separated)</Label>
-                      <Input
-                        id="tags"
-                        value={formData.tags?.join(", ") || ""}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            tags: e.target.value
-                              .split(",")
-                              .map((tag) => tag.trim())
-                              .filter(Boolean),
-                          }))
-                        }
-                        placeholder="coffee, hot, espresso"
-                        className="border-gray-200 rounded-xl"
-                      />
-                    </div>
-
-                    {/* Status Toggles */}
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label htmlFor="is_active">Active</Label>
-                          <p className="text-sm text-gray-500">Product is available for ordering</p>
-                        </div>
-                        <Switch
-                          id="is_active"
-                          checked={formData.is_active || false}
-                          onCheckedChange={(checked) =>
-                            setFormData((prev) => ({
-                              ...prev,
-                              is_active: checked,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label htmlFor="is_featured">Featured</Label>
-                          <p className="text-sm text-gray-500">Highlight this product</p>
-                        </div>
-                        <Switch
-                          id="is_featured"
-                          checked={formData.is_featured || false}
-                          onCheckedChange={(checked) =>
-                            setFormData((prev) => ({
-                              ...prev,
-                              is_featured: checked,
-                            }))
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
+                <div>
+                  <Label htmlFor="price">Price (₱) *</Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.price}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, price: Number.parseFloat(e.target.value) || 0 }))
+                    }
+                    placeholder="0.00"
+                  />
                 </div>
 
-                {/* Modal Footer */}
-                <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
-                  <Button
-                    variant="outline"
-                    onClick={() => setState((prev) => ({ ...prev, isModalOpen: false }))}
-                    className="border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl"
+                <div>
+                  <Label htmlFor="main_category">Main Category *</Label>
+                  <Select
+                    value={formData.main_category_id}
+                    onValueChange={(value) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        main_category_id: value,
+                        subcategory_id: "", // Reset subcategory when main category changes
+                      }))
+                    }
                   >
-                    Cancel
-                  </Button>
-                  <Button onClick={handleSaveProduct} className="bg-gray-900 hover:bg-gray-800 text-white rounded-xl">
-                    <Save className="w-4 h-4 mr-2" />
-                    {state.editingProduct ? "Update Product" : "Create Product"}
-                  </Button>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select main category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {state.mainCategories.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="subcategory">Subcategory</Label>
+                  <Select
+                    value={formData.subcategory_id}
+                    onValueChange={(value) => setFormData((prev) => ({ ...prev, subcategory_id: value }))}
+                    disabled={!formData.main_category_id || formData.main_category_id === "all"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select subcategory" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">No subcategory</SelectItem>
+                      {state.subcategories
+                        .filter((sub) => sub.main_category_id === formData.main_category_id)
+                        .map((subcategory) => (
+                          <SelectItem key={subcategory.id} value={subcategory.id}>
+                            {subcategory.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+              {/* Image Upload */}
+              <div className="space-y-4">
+                <div>
+                  <Label>Product Image</Label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    {formData.image_url ? (
+                      <div className="relative">
+                        <Image
+                          src={formData.image_url || "/placeholder.svg"}
+                          alt="Product preview"
+                          width={200}
+                          height={150}
+                          className="mx-auto rounded-lg object-cover"
+                        />
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="absolute top-2 right-2"
+                          onClick={() => setFormData((prev) => ({ ...prev, image_url: "" }))}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div>
+                        <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600 mb-2">Drop an image here or click to upload</p>
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleImageUpload(file)
+                          }}
+                          disabled={imageUploading}
+                          className="hidden"
+                          id="image-upload"
+                        />
+                        <Label htmlFor="image-upload" className="cursor-pointer">
+                          <Button variant="outline" disabled={imageUploading} asChild>
+                            <span>{imageUploading ? "Uploading..." : "Choose File"}</span>
+                          </Button>
+                        </Label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Manual URL Input */}
+                  <div className="mt-2">
+                    <Label htmlFor="image_url" className="text-sm">
+                      Or enter image URL
+                    </Label>
+                    <Input
+                      id="image_url"
+                      value={formData.image_url}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, image_url: e.target.value }))}
+                      placeholder="https://example.com/image.jpg"
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Description */}
+            <div>
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Describe your product..."
+                rows={3}
+              />
+            </div>
+
+            {/* Additional Details */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="rating">Rating (0-5)</Label>
+                <Input
+                  id="rating"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="5"
+                  value={formData.rating || ""}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      rating: e.target.value ? Number.parseFloat(e.target.value) : undefined,
+                    }))
+                  }
+                  placeholder="4.5"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="prep_time">Prep Time (minutes)</Label>
+                <Input
+                  id="prep_time"
+                  type="number"
+                  min="0"
+                  value={formData.prep_time || ""}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      prep_time: e.target.value ? Number.parseInt(e.target.value) : undefined,
+                    }))
+                  }
+                  placeholder="5"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="stock_quantity">Stock Quantity</Label>
+                <Input
+                  id="stock_quantity"
+                  type="number"
+                  min="0"
+                  value={formData.stock_quantity || ""}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      stock_quantity: e.target.value ? Number.parseInt(e.target.value) : undefined,
+                    }))
+                  }
+                  placeholder="100"
+                />
+              </div>
+            </div>
+
+            {/* Tags */}
+            <div>
+              <Label htmlFor="tags">Tags (comma-separated)</Label>
+              <Input
+                id="tags"
+                value={formData.tags.join(", ")}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    tags: e.target.value
+                      .split(",")
+                      .map((tag) => tag.trim())
+                      .filter(Boolean),
+                  }))
+                }
+                placeholder="coffee, hot, signature"
+              />
+              {formData.tags.length > 0 && (
+                <div className="flex gap-1 mt-2 flex-wrap">
+                  {formData.tags.map((tag, index) => (
+                    <Badge key={index} variant="secondary" className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Status Toggles */}
+            <div className="flex gap-6">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="is_active"
+                  checked={formData.is_active}
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, is_active: checked }))}
+                />
+                <Label htmlFor="is_active">Active</Label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="is_featured"
+                  checked={formData.is_featured}
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, is_featured: checked }))}
+                />
+                <Label htmlFor="is_featured">Featured</Label>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-2 pt-4 border-t">
+              <Button variant="outline" onClick={() => setIsProductModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveProduct}
+                disabled={!formData.name || !formData.main_category_id || formData.price <= 0}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {editingProduct ? "Update" : "Create"} Product
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
