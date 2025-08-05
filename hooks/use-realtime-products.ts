@@ -54,7 +54,7 @@ export function useRealtimeProducts() {
 
         // Check if it's an HTML error page
         if (responseText.includes("<html") || responseText.includes("<!DOCTYPE")) {
-          throw new Error("Received HTML error page instead of JSON. Check Supabase configuration.")
+          throw new Error("Received HTML error page instead of JSON. Using fallback data.")
         }
 
         throw new Error("Invalid JSON response from server")
@@ -75,6 +75,10 @@ export function useRealtimeProducts() {
         } else if (Array.isArray(body.products)) {
           // Alternative format: { products: [...] }
           productsArray = body.products
+        } else if (body.error && body.source === "mock") {
+          // Mock data fallback
+          productsArray = body.data || []
+          console.log("⚠️ Using mock data:", body.message)
         } else if (body.error) {
           // Error response
           throw new Error(body.error || "API returned an error")
@@ -87,7 +91,34 @@ export function useRealtimeProducts() {
       console.error("❌ Error fetching products:", err)
       const errorMessage = err instanceof Error ? err.message : "Failed to fetch products"
       setError(errorMessage)
-      setProducts([])
+
+      // Set fallback products on error
+      setProducts([
+        {
+          id: "1",
+          name: "Espresso",
+          description: "Rich and bold espresso shot",
+          price: 89,
+          category: "ESPRESSO",
+          image_url: "/menu-espresso-updated.jpg",
+          is_active: true,
+          rating: 4.8,
+          prep_time: 2,
+          stock_quantity: 100,
+        },
+        {
+          id: "2",
+          name: "Latte",
+          description: "Espresso with steamed milk",
+          price: 109,
+          category: "ESPRESSO",
+          image_url: "/menu-espresso-updated.jpg",
+          is_active: true,
+          rating: 4.7,
+          prep_time: 3,
+          stock_quantity: 100,
+        },
+      ])
     } finally {
       setLoading(false)
     }

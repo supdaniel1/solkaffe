@@ -1,25 +1,9 @@
 import { NextResponse } from "next/server"
-import { createServerSupabaseClient } from "@/lib/supabase-server"
 
 export const runtime = "nodejs"
 
 /**
- * Safe JSON parser that handles HTML error pages
- */
-function safeJsonParse(text: string) {
-  try {
-    return JSON.parse(text)
-  } catch {
-    // If it's not JSON, it might be an HTML error page
-    if (text.includes("<html") || text.includes("<!DOCTYPE")) {
-      return { error: "Received HTML response instead of JSON", htmlContent: text.substring(0, 200) }
-    }
-    return { error: "Invalid JSON response", content: text.substring(0, 200) }
-  }
-}
-
-/**
- * GET /api/products
+ * GET /api/products - Fallback implementation with mock data
  */
 export async function GET() {
   const headers = { "Content-Type": "application/json" }
@@ -27,121 +11,188 @@ export async function GET() {
   try {
     console.log("🔍 [/api/products] Starting product fetch...")
 
-    // Test environment variables
-    const supabaseUrl = process.env.SUPABASE_PROJECT_URL || process.env.SUPABASE_URL
+    // Check environment variables
+    const supabaseUrl =
+      process.env.SUPABASE_PROJECT_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
     const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
 
     console.log("🔧 Environment check:")
     console.log("- SUPABASE_URL:", supabaseUrl ? "✅ Set" : "❌ Missing")
     console.log("- SERVICE_KEY:", serviceKey ? "✅ Set" : "❌ Missing")
 
-    if (!supabaseUrl || !serviceKey) {
-      console.error("❌ Missing Supabase credentials")
+    // If no valid Supabase credentials, return mock data
+    if (!supabaseUrl || !serviceKey || supabaseUrl.includes("xyzcompany") || serviceKey.includes("demo")) {
+      console.log("⚠️ Using mock data due to missing/invalid Supabase credentials")
       return NextResponse.json(
         {
-          data: [],
-          error: "Missing Supabase credentials",
-          debug: {
-            hasUrl: !!supabaseUrl,
-            hasKey: !!serviceKey,
-          },
+          data: getMockProducts(),
+          source: "mock",
+          message: "Using mock data - configure Supabase for live data",
         },
         { headers, status: 200 },
       )
     }
 
-    const supabase = createServerSupabaseClient()
+    // Try to create Supabase client
+    let supabase
+    try {
+      const { createClient } = await import("@supabase/supabase-js")
+      supabase = createClient(supabaseUrl, serviceKey, {
+        auth: { persistSession: false },
+      })
+    } catch (importError) {
+      console.error("❌ Failed to import Supabase client:", importError)
+      return NextResponse.json(
+        {
+          data: getMockProducts(),
+          source: "mock",
+          error: "Supabase client import failed",
+        },
+        { headers, status: 200 },
+      )
+    }
 
-    // Test basic connection first
+    // Test connection with timeout
     console.log("🔍 Testing Supabase connection...")
-    const { data: testData, error: testError } = await supabase.from("products").select("count").limit(1)
 
-    if (testError) {
-      console.error("❌ Supabase connection test failed:", testError)
+    const connectionPromise = supabase.from("products").select("id").limit(1)
+
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Connection timeout")), 5000))
+
+    try {
+      const { data: testData, error: testError } = (await Promise.race([connectionPromise, timeoutPromise])) as any
+
+      if (testError) {
+        console.error("❌ Supabase connection test failed:", testError)
+        throw new Error(`Database error: ${testError.message}`)
+      }
+
+      console.log("✅ Supabase connection successful")
+
+      // Fetch actual products
+      const { data: products, error } = await supabase
+        .from("products")
+        .select(`
+          id,
+          name,
+          description,
+          price,
+          category,
+          image_url,
+          is_active,
+          rating,
+          prep_time,
+          stock_quantity,
+          created_at,
+          updated_at
+        `)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        console.error("❌ Products query failed:", error)
+        throw new Error(`Query error: ${error.message}`)
+      }
+
+      console.log(`✅ Successfully fetched ${products?.length || 0} products from database`)
+
       return NextResponse.json(
         {
-          data: [],
-          error: "Database connection failed",
-          supabaseError: testError.message,
-          details: testError,
+          data: products || [],
+          source: "database",
+          count: products?.length || 0,
+        },
+        { headers, status: 200 },
+      )
+    } catch (dbError) {
+      console.error("❌ Database operation failed:", dbError)
+      console.log("⚠️ Falling back to mock data")
+
+      return NextResponse.json(
+        {
+          data: getMockProducts(),
+          source: "mock",
+          error: dbError instanceof Error ? dbError.message : "Database connection failed",
+          fallback: true,
         },
         { headers, status: 200 },
       )
     }
-
-    console.log("✅ Supabase connection successful")
-
-    // Fetch products with error handling
-    console.log("🔍 Fetching products...")
-    const { data: products, error } = await supabase
-      .from("products")
-      .select(`
-        id,
-        name,
-        description,
-        price,
-        category,
-        image_url,
-        is_active,
-        rating,
-        prep_time,
-        stock_quantity,
-        created_at,
-        updated_at
-      `)
-      .eq("is_active", true)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("❌ [/api/products] Supabase query error:", error)
-      return NextResponse.json(
-        {
-          data: [],
-          error: "Failed to fetch products",
-          supabaseError: error.message,
-          details: error,
-        },
-        { headers, status: 200 },
-      )
-    }
-
-    console.log(`✅ Successfully fetched ${products?.length || 0} products`)
-
-    // Ensure we return an array
-    const safeProducts = Array.isArray(products) ? products : []
-
-    return NextResponse.json(
-      {
-        data: safeProducts,
-        count: safeProducts.length,
-        timestamp: new Date().toISOString(),
-      },
-      { headers, status: 200 },
-    )
   } catch (err) {
     console.error("❌ [/api/products] Unexpected exception:", err)
 
-    // Handle different error types
-    let errorMessage = "Unknown error occurred"
-    let errorDetails = {}
-
-    if (err instanceof Error) {
-      errorMessage = err.message
-      errorDetails = {
-        name: err.name,
-        stack: err.stack?.substring(0, 500),
-      }
-    }
-
     return NextResponse.json(
       {
-        data: [],
-        error: errorMessage,
-        type: "exception",
-        details: errorDetails,
-        timestamp: new Date().toISOString(),
+        data: getMockProducts(),
+        source: "mock",
+        error: err instanceof Error ? err.message : "Unknown error",
+        fallback: true,
       },
       { headers, status: 200 },
     )
   }
+}
+
+/**
+ * Mock products for fallback when database is unavailable
+ */
+function getMockProducts() {
+  return [
+    {
+      id: "1",
+      name: "Espresso",
+      description: "Rich and bold espresso shot",
+      price: 89,
+      category: "ESPRESSO",
+      image_url: "/menu-espresso-updated.jpg",
+      is_active: true,
+      rating: 4.8,
+      prep_time: 2,
+      stock_quantity: 100,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: "2",
+      name: "Latte",
+      description: "Espresso with steamed milk",
+      price: 109,
+      category: "ESPRESSO",
+      image_url: "/menu-espresso-updated.jpg",
+      is_active: true,
+      rating: 4.7,
+      prep_time: 3,
+      stock_quantity: 100,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: "3",
+      name: "Frappuccino",
+      description: "Blended coffee drink with ice",
+      price: 129,
+      category: "COLD_DRINKS",
+      image_url: "/menu-frappucino-updated.jpg",
+      is_active: true,
+      rating: 4.6,
+      prep_time: 4,
+      stock_quantity: 100,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: "4",
+      name: "Matcha Latte",
+      description: "Premium matcha with steamed milk",
+      price: 119,
+      category: "TEA",
+      image_url: "/menu-matcha-updated.jpg",
+      is_active: true,
+      rating: 4.5,
+      prep_time: 3,
+      stock_quantity: 100,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  ]
 }

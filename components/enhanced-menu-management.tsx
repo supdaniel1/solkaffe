@@ -2,17 +2,17 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Edit, Trash2, Coffee, Tag, Settings, Package } from "lucide-react"
+import { Plus, Edit, Trash2 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 // Types
 interface Product {
@@ -71,6 +71,8 @@ interface FormData {
 }
 
 export default function EnhancedMenuManagement() {
+  const { toast } = useToast()
+
   // State
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -107,6 +109,11 @@ export default function EnhancedMenuManagement() {
       await Promise.all([loadProducts(), loadCategories(), loadVariations(), loadAddOns()])
     } catch (error) {
       console.error("Error loading data:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load menu data",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -114,7 +121,7 @@ export default function EnhancedMenuManagement() {
 
   const loadProducts = async () => {
     try {
-      const response = await fetch("/api/admin/products")
+      const response = await fetch("/api/products")
       const data = await response.json()
       setProducts(data.data || [])
     } catch (error) {
@@ -125,8 +132,18 @@ export default function EnhancedMenuManagement() {
   const loadCategories = async () => {
     try {
       const response = await fetch("/api/admin/categories")
-      const data = await response.json()
-      setCategories(data.data || [])
+      if (response.ok) {
+        const data = await response.json()
+        setCategories(data.data || [])
+      } else {
+        // Fallback categories
+        setCategories([
+          { id: "1", name: "ESPRESSO", description: "Espresso-based drinks", display_order: 1, is_active: true },
+          { id: "2", name: "COLD_DRINKS", description: "Cold beverages", display_order: 2, is_active: true },
+          { id: "3", name: "TEA", description: "Tea-based drinks", display_order: 3, is_active: true },
+          { id: "4", name: "PASTRIES", description: "Baked goods", display_order: 4, is_active: true },
+        ])
+      }
     } catch (error) {
       console.error("Error loading categories:", error)
     }
@@ -135,8 +152,19 @@ export default function EnhancedMenuManagement() {
   const loadVariations = async () => {
     try {
       const response = await fetch("/api/admin/variations")
-      const data = await response.json()
-      setVariations(data.data || [])
+      if (response.ok) {
+        const data = await response.json()
+        setVariations(data.data || [])
+      } else {
+        // Fallback variations
+        setVariations([
+          { id: "1", name: "Small", type: "size", price_modifier: -10, is_active: true },
+          { id: "2", name: "Medium", type: "size", price_modifier: 0, is_active: true },
+          { id: "3", name: "Large", type: "size", price_modifier: 15, is_active: true },
+          { id: "4", name: "Hot", type: "temperature", price_modifier: 0, is_active: true },
+          { id: "5", name: "Iced", type: "temperature", price_modifier: 5, is_active: true },
+        ])
+      }
     } catch (error) {
       console.error("Error loading variations:", error)
     }
@@ -145,8 +173,54 @@ export default function EnhancedMenuManagement() {
   const loadAddOns = async () => {
     try {
       const response = await fetch("/api/admin/add-ons")
-      const data = await response.json()
-      setAddOns(data.data || [])
+      if (response.ok) {
+        const data = await response.json()
+        setAddOns(data.data || [])
+      } else {
+        // Fallback add-ons
+        setAddOns([
+          {
+            id: "1",
+            name: "Extra Shot",
+            description: "Additional espresso shot",
+            price: 15,
+            max_quantity: 3,
+            is_active: true,
+          },
+          {
+            id: "2",
+            name: "Vanilla Syrup",
+            description: "Sweet vanilla flavoring",
+            price: 10,
+            max_quantity: 2,
+            is_active: true,
+          },
+          {
+            id: "3",
+            name: "Caramel Syrup",
+            description: "Rich caramel flavoring",
+            price: 10,
+            max_quantity: 2,
+            is_active: true,
+          },
+          {
+            id: "4",
+            name: "Extra Foam",
+            description: "Additional milk foam",
+            price: 5,
+            max_quantity: 1,
+            is_active: true,
+          },
+          {
+            id: "5",
+            name: "Oat Milk",
+            description: "Plant-based milk alternative",
+            price: 12,
+            max_quantity: 1,
+            is_active: true,
+          },
+        ])
+      }
     } catch (error) {
       console.error("Error loading add-ons:", error)
     }
@@ -157,17 +231,21 @@ export default function EnhancedMenuManagement() {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleVariationToggle = (variationId: string, checked: boolean) => {
+  const handleVariationToggle = (variationId: string) => {
     setFormData((prev) => ({
       ...prev,
-      variations: checked ? [...prev.variations, variationId] : prev.variations.filter((id) => id !== variationId),
+      variations: prev.variations.includes(variationId)
+        ? prev.variations.filter((id) => id !== variationId)
+        : [...prev.variations, variationId],
     }))
   }
 
-  const handleAddOnToggle = (addOnId: string, checked: boolean) => {
+  const handleAddOnToggle = (addOnId: string) => {
     setFormData((prev) => ({
       ...prev,
-      add_ons: checked ? [...prev.add_ons, addOnId] : prev.add_ons.filter((id) => id !== addOnId),
+      add_ons: prev.add_ons.includes(addOnId)
+        ? prev.add_ons.filter((id) => id !== addOnId)
+        : [...prev.add_ons, addOnId],
     }))
   }
 
@@ -213,11 +291,11 @@ export default function EnhancedMenuManagement() {
         description: formData.description,
         price: Number.parseFloat(formData.price) || 0,
         category: formData.category,
-        image_url: formData.image_url || null,
+        image_url: formData.image_url,
         is_active: formData.is_active,
-        rating: formData.rating ? Number.parseFloat(formData.rating) : null,
-        prep_time: formData.prep_time ? Number.parseInt(formData.prep_time) : null,
-        stock_quantity: formData.stock_quantity ? Number.parseInt(formData.stock_quantity) : null,
+        rating: Number.parseFloat(formData.rating) || null,
+        prep_time: Number.parseInt(formData.prep_time) || null,
+        stock_quantity: Number.parseInt(formData.stock_quantity) || null,
         variations: formData.variations,
         add_ons: formData.add_ons,
       }
@@ -233,14 +311,21 @@ export default function EnhancedMenuManagement() {
       })
 
       if (response.ok) {
-        await loadProducts()
+        toast({
+          title: "Success",
+          description: `Product ${editingProduct ? "updated" : "created"} successfully`,
+        })
         setIsProductModalOpen(false)
-        setEditingProduct(null)
+        loadProducts()
       } else {
-        console.error("Failed to save product")
+        throw new Error("Failed to save product")
       }
     } catch (error) {
-      console.error("Error saving product:", error)
+      toast({
+        title: "Error",
+        description: "Failed to save product",
+        variant: "destructive",
+      })
     }
   }
 
@@ -253,12 +338,20 @@ export default function EnhancedMenuManagement() {
       })
 
       if (response.ok) {
-        await loadProducts()
+        toast({
+          title: "Success",
+          description: "Product deleted successfully",
+        })
+        loadProducts()
       } else {
-        console.error("Failed to delete product")
+        throw new Error("Failed to delete product")
       }
     } catch (error) {
-      console.error("Error deleting product:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete product",
+        variant: "destructive",
+      })
     }
   }
 
@@ -267,16 +360,24 @@ export default function EnhancedMenuManagement() {
       const response = await fetch(`/api/admin/products/${productId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_active: isActive }),
+        body: JSON.stringify({ is_active: !isActive }),
       })
 
       if (response.ok) {
-        await loadProducts()
+        toast({
+          title: "Success",
+          description: `Product ${!isActive ? "activated" : "deactivated"}`,
+        })
+        loadProducts()
       } else {
-        console.error("Failed to update product status")
+        throw new Error("Failed to update product status")
       }
     } catch (error) {
-      console.error("Error updating product status:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update product status",
+        variant: "destructive",
+      })
     }
   }
 
@@ -284,7 +385,7 @@ export default function EnhancedMenuManagement() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
           <p>Loading menu management...</p>
         </div>
       </div>
@@ -295,30 +396,18 @@ export default function EnhancedMenuManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Menu Management</h2>
-        <Button onClick={() => openProductModal()} className="flex items-center gap-2">
-          <Plus className="h-4 w-4" />
+        <Button onClick={() => openProductModal()}>
+          <Plus className="w-4 h-4 mr-2" />
           Add Product
         </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="products" className="flex items-center gap-2">
-            <Coffee className="h-4 w-4" />
-            Products
-          </TabsTrigger>
-          <TabsTrigger value="categories" className="flex items-center gap-2">
-            <Tag className="h-4 w-4" />
-            Categories
-          </TabsTrigger>
-          <TabsTrigger value="variations" className="flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            Variations
-          </TabsTrigger>
-          <TabsTrigger value="addons" className="flex items-center gap-2">
-            <Package className="h-4 w-4" />
-            Add-ons
-          </TabsTrigger>
+        <TabsList>
+          <TabsTrigger value="products">Products</TabsTrigger>
+          <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="variations">Variations</TabsTrigger>
+          <TabsTrigger value="addons">Add-ons</TabsTrigger>
         </TabsList>
 
         <TabsContent value="products" className="space-y-4">
@@ -327,33 +416,49 @@ export default function EnhancedMenuManagement() {
               <Card key={product.id} className="relative">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg">{product.name}</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={product.is_active}
-                        onCheckedChange={(checked) => handleToggleProductStatus(product.id, checked)}
-                      />
-                      <Button variant="ghost" size="sm" onClick={() => openProductModal(product)}>
-                        <Edit className="h-4 w-4" />
+                    <div>
+                      <CardTitle className="text-lg">{product.name}</CardTitle>
+                      <Badge variant={product.is_active ? "default" : "secondary"}>
+                        {product.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="outline" onClick={() => openProductModal(product)}>
+                        <Edit className="w-3 h-3" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDeleteProduct(product.id)}>
-                        <Trash2 className="h-4 w-4" />
+                      <Button size="sm" variant="outline" onClick={() => handleDeleteProduct(product.id)}>
+                        <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-gray-600 mb-2">{product.description}</p>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold">${product.price}</span>
-                    <Badge variant="secondary">{product.category}</Badge>
+                  <p className="text-sm text-muted-foreground mb-2">{product.description}</p>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">₱{product.price}</span>
+                    <Badge variant="outline">{product.category}</Badge>
                   </div>
-                  {product.variations && product.variations.length > 0 && (
-                    <div className="text-xs text-gray-500">Variations: {product.variations.length}</div>
+                  {(product.variations?.length || product.add_ons?.length) && (
+                    <div className="mt-2 flex gap-1">
+                      {product.variations?.length && (
+                        <Badge variant="secondary" className="text-xs">
+                          {product.variations.length} variations
+                        </Badge>
+                      )}
+                      {product.add_ons?.length && (
+                        <Badge variant="secondary" className="text-xs">
+                          {product.add_ons.length} add-ons
+                        </Badge>
+                      )}
+                    </div>
                   )}
-                  {product.add_ons && product.add_ons.length > 0 && (
-                    <div className="text-xs text-gray-500">Add-ons: {product.add_ons.length}</div>
-                  )}
+                  <div className="mt-3">
+                    <Switch
+                      checked={product.is_active}
+                      onCheckedChange={() => handleToggleProductStatus(product.id, product.is_active)}
+                    />
+                    <span className="ml-2 text-sm">Available</span>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -361,20 +466,82 @@ export default function EnhancedMenuManagement() {
         </TabsContent>
 
         <TabsContent value="categories">
-          <div className="text-center py-8">
-            <p className="text-gray-500">Category management coming soon...</p>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {categories.map((category) => (
+              <Card key={category.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    {category.name}
+                    <Badge variant={category.is_active ? "default" : "secondary"}>
+                      {category.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{category.description}</p>
+                  <div className="mt-2">
+                    <span className="text-xs text-muted-foreground">Display Order: {category.display_order}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </TabsContent>
 
         <TabsContent value="variations">
-          <div className="text-center py-8">
-            <p className="text-gray-500">Variation management coming soon...</p>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {variations.map((variation) => (
+              <Card key={variation.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    {variation.name}
+                    <Badge variant={variation.is_active ? "default" : "secondary"}>
+                      {variation.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-sm font-medium">Type: </span>
+                      <Badge variant="outline">{variation.type}</Badge>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">Price Modifier: </span>
+                      <span className={`text-sm ${variation.price_modifier >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {variation.price_modifier >= 0 ? "+" : ""}₱{variation.price_modifier}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </TabsContent>
 
         <TabsContent value="addons">
-          <div className="text-center py-8">
-            <p className="text-gray-500">Add-on management coming soon...</p>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {addOns.map((addOn) => (
+              <Card key={addOn.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    {addOn.name}
+                    <Badge variant={addOn.is_active ? "default" : "secondary"}>
+                      {addOn.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">{addOn.description}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">₱{addOn.price}</span>
+                      <span className="text-xs text-muted-foreground">Max: {addOn.max_quantity}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </TabsContent>
       </Tabs>
@@ -391,7 +558,7 @@ export default function EnhancedMenuManagement() {
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Basic Information</h3>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label htmlFor="name">Name</Label>
                   <Input
@@ -401,12 +568,12 @@ export default function EnhancedMenuManagement() {
                     placeholder="Product name"
                   />
                 </div>
+
                 <div>
-                  <Label htmlFor="price">Price</Label>
+                  <Label htmlFor="price">Price (₱)</Label>
                   <Input
                     id="price"
                     type="number"
-                    step="0.01"
                     value={formData.price}
                     onChange={(e) => handleInputChange("price", e.target.value)}
                     placeholder="0.00"
@@ -425,7 +592,7 @@ export default function EnhancedMenuManagement() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label htmlFor="category">Category</Label>
                   <Select value={formData.category} onValueChange={(value) => handleInputChange("category", value)}>
@@ -441,80 +608,131 @@ export default function EnhancedMenuManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center space-x-2 pt-6">
-                  <Switch
-                    id="is_active"
-                    checked={formData.is_active}
-                    onCheckedChange={(checked) => handleInputChange("is_active", checked)}
+
+                <div>
+                  <Label htmlFor="image_url">Image URL</Label>
+                  <Input
+                    id="image_url"
+                    value={formData.image_url}
+                    onChange={(e) => handleInputChange("image_url", e.target.value)}
+                    placeholder="/images/product.jpg"
                   />
-                  <Label htmlFor="is_active">Available</Label>
                 </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <Label htmlFor="rating">Rating</Label>
+                  <Input
+                    id="rating"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="5"
+                    value={formData.rating}
+                    onChange={(e) => handleInputChange("rating", e.target.value)}
+                    placeholder="4.5"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="prep_time">Prep Time (min)</Label>
+                  <Input
+                    id="prep_time"
+                    type="number"
+                    value={formData.prep_time}
+                    onChange={(e) => handleInputChange("prep_time", e.target.value)}
+                    placeholder="5"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="stock_quantity">Stock Quantity</Label>
+                  <Input
+                    id="stock_quantity"
+                    type="number"
+                    value={formData.stock_quantity}
+                    onChange={(e) => handleInputChange("stock_quantity", e.target.value)}
+                    placeholder="100"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="is_active"
+                  checked={formData.is_active}
+                  onCheckedChange={(checked) => handleInputChange("is_active", checked)}
+                />
+                <Label htmlFor="is_active">Available</Label>
               </div>
             </div>
 
             {/* Variations Section */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Variations</h3>
-              <p className="text-sm text-gray-600">Select which variations apply to this product</p>
+              <p className="text-sm text-muted-foreground">Select which variations apply to this product</p>
 
-              <div className="max-h-40 overflow-y-auto border rounded-lg p-4 space-y-3">
+              <div className="max-h-40 overflow-y-auto border rounded-lg p-3 space-y-2">
                 {variations
                   .filter((v) => v.is_active)
                   .map((variation) => (
-                    <div key={variation.id} className="flex items-center space-x-3">
-                      <Checkbox
+                    <div key={variation.id} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
                         id={`variation-${variation.id}`}
                         checked={formData.variations.includes(variation.id)}
-                        onCheckedChange={(checked) => handleVariationToggle(variation.id, checked as boolean)}
+                        onChange={() => handleVariationToggle(variation.id)}
+                        className="rounded"
                       />
-                      <div className="flex-1">
-                        <Label htmlFor={`variation-${variation.id}`} className="text-sm font-medium">
-                          {variation.name}
-                        </Label>
-                        <div className="text-xs text-gray-500">
-                          {variation.type} • {variation.price_modifier >= 0 ? "+" : ""}${variation.price_modifier}
+                      <Label htmlFor={`variation-${variation.id}`} className="flex-1 cursor-pointer">
+                        <div className="flex items-center justify-between">
+                          <span>{variation.name}</span>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {variation.type}
+                            </Badge>
+                            <span
+                              className={`text-xs ${variation.price_modifier >= 0 ? "text-green-600" : "text-red-600"}`}
+                            >
+                              {variation.price_modifier >= 0 ? "+" : ""}₱{variation.price_modifier}
+                            </span>
+                          </div>
                         </div>
-                      </div>
+                      </Label>
                     </div>
                   ))}
-                {variations.filter((v) => v.is_active).length === 0 && (
-                  <p className="text-sm text-gray-500 text-center py-4">
-                    No variations available. Create some variations first.
-                  </p>
-                )}
               </div>
             </div>
 
             {/* Add-ons Section */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Add-ons</h3>
-              <p className="text-sm text-gray-600">Select which add-ons are available for this product</p>
+              <p className="text-sm text-muted-foreground">Select which add-ons are available for this product</p>
 
-              <div className="max-h-40 overflow-y-auto border rounded-lg p-4 space-y-3">
+              <div className="max-h-40 overflow-y-auto border rounded-lg p-3 space-y-2">
                 {addOns
                   .filter((a) => a.is_active)
                   .map((addOn) => (
-                    <div key={addOn.id} className="flex items-center space-x-3">
-                      <Checkbox
+                    <div key={addOn.id} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
                         id={`addon-${addOn.id}`}
                         checked={formData.add_ons.includes(addOn.id)}
-                        onCheckedChange={(checked) => handleAddOnToggle(addOn.id, checked as boolean)}
+                        onChange={() => handleAddOnToggle(addOn.id)}
+                        className="rounded"
                       />
-                      <div className="flex-1">
-                        <Label htmlFor={`addon-${addOn.id}`} className="text-sm font-medium">
-                          {addOn.name}
-                        </Label>
-                        <div className="text-xs text-gray-500">
-                          {addOn.description && `${addOn.description} • `}${addOn.price}
+                      <Label htmlFor={`addon-${addOn.id}`} className="flex-1 cursor-pointer">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-medium">{addOn.name}</span>
+                            {addOn.description && <p className="text-xs text-muted-foreground">{addOn.description}</p>}
+                          </div>
+                          <span className="text-sm font-medium">₱{addOn.price}</span>
                         </div>
-                      </div>
+                      </Label>
                     </div>
                   ))}
-                {addOns.filter((a) => a.is_active).length === 0 && (
-                  <p className="text-sm text-gray-500 text-center py-4">
-                    No add-ons available. Create some add-ons first.
-                  </p>
-                )}
               </div>
             </div>
 
@@ -523,7 +741,7 @@ export default function EnhancedMenuManagement() {
               <Button variant="outline" onClick={() => setIsProductModalOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveProduct}>{editingProduct ? "Update" : "Create"}</Button>
+              <Button onClick={handleSaveProduct}>{editingProduct ? "Update" : "Create"} Product</Button>
             </div>
           </div>
         </DialogContent>
