@@ -13,14 +13,22 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { useEnhancedCart } from "@/hooks/use-enhanced-cart"
 import Image from "next/image"
-import type { Product, Variation, AddOn, MenuStructure } from "@/lib/types"
+import type { MainCategory, Product, Variation, AddOn } from "@/lib/types"
+
+interface MenuData {
+  main_categories: MainCategory[]
+  featured_products: Product[]
+  total_products: number
+}
 
 export default function OrderPage() {
   const { toast } = useToast()
   const { addItem, items, getTotalPrice, getTotalItems } = useEnhancedCart()
 
   // State
-  const [menuData, setMenuData] = useState<MenuStructure | null>(null)
+  const [menuData, setMenuData] = useState<MenuData | null>(null)
+  const [variations, setVariations] = useState<Variation[]>([])
+  const [addOns, setAddOns] = useState<AddOn[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMainCategory, setSelectedMainCategory] = useState<string | null>(null)
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null)
@@ -38,6 +46,8 @@ export default function OrderPage() {
   // Load menu data
   useEffect(() => {
     loadMenuData()
+    loadVariations()
+    loadAddOns()
   }, [])
 
   const loadMenuData = async () => {
@@ -47,39 +57,114 @@ export default function OrderPage() {
 
       const response = await fetch("/api/menu/structure")
 
+      // Check if response is ok
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
+      // Check content type
       const contentType = response.headers.get("content-type")
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text()
-        console.error("Non-JSON response:", text.substring(0, 200))
+        console.error("❌ Non-JSON response:", text.substring(0, 200))
         throw new Error("Server returned non-JSON response")
       }
 
       const data = await response.json()
-      console.log("✅ Menu data loaded successfully:", data)
+      console.log("✅ Menu data loaded successfully:", data.source || "unknown")
 
       setMenuData(data)
+
+      // Auto-select first category if available
+      if (data.main_categories && data.main_categories.length > 0) {
+        setSelectedMainCategory(data.main_categories[0].id)
+      }
     } catch (error) {
       console.error("❌ Error loading menu:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load menu. Using offline data.",
-        variant: "destructive",
-      })
 
-      // Set fallback data to prevent app crash
-      setMenuData({
-        main_categories: [],
+      // Set fallback data
+      const fallbackData = {
+        main_categories: [
+          {
+            id: "1",
+            name: "Beverages",
+            description: "Coffee and drinks",
+            display_order: 1,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            subcategories: [
+              {
+                id: "1",
+                main_category_id: "1",
+                name: "Coffee",
+                description: "Hot and cold coffee drinks",
+                display_order: 1,
+                is_active: true,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                products: [
+                  {
+                    id: "1",
+                    name: "Americano",
+                    description: "Classic black coffee",
+                    price: 95,
+                    main_category_id: "1",
+                    subcategory_id: "1",
+                    image_url: "/menu-espresso-updated.jpg",
+                    is_active: true,
+                    is_featured: true,
+                    rating: 4.5,
+                    prep_time: 3,
+                    stock_quantity: 100,
+                    tags: ["coffee", "hot"],
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
         featured_products: [],
-        total_products: 0,
-        variations: [],
-        add_ons: [],
+        total_products: 1,
+        source: "fallback",
+      }
+
+      setMenuData(fallbackData)
+      setSelectedMainCategory("1")
+
+      toast({
+        title: "Connection Issue",
+        description: "Using offline menu. Some features may be limited.",
+        variant: "destructive",
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadVariations = async () => {
+    try {
+      const response = await fetch("/api/admin/variations")
+      if (response.ok) {
+        const data = await response.json()
+        setVariations(data.data || [])
+      }
+    } catch (error) {
+      console.error("Error loading variations:", error)
+    }
+  }
+
+  const loadAddOns = async () => {
+    try {
+      const response = await fetch("/api/admin/add-ons")
+      if (response.ok) {
+        const data = await response.json()
+        setAddOns(data.data || [])
+      }
+    } catch (error) {
+      console.error("Error loading add-ons:", error)
     }
   }
 
@@ -220,18 +305,11 @@ export default function OrderPage() {
     )
   }
 
-  if (!menuData || menuData.main_categories.length === 0) {
+  if (!menuData) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Package className="w-8 h-8 text-gray-400" />
-          </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Menu not available</h3>
-          <p className="text-gray-600 mb-4">We're having trouble loading the menu right now.</p>
-          <Button onClick={loadMenuData} variant="outline">
-            Try Again
-          </Button>
+          <p className="text-gray-600">Failed to load menu. Please refresh the page.</p>
         </div>
       </div>
     )
@@ -263,7 +341,7 @@ export default function OrderPage() {
                         .find((sub) => sub.id === selectedSubcategory)?.name
                     : selectedMainCategory
                       ? menuData.main_categories.find((cat) => cat.id === selectedMainCategory)?.name
-                      : "Sol Kaffé Menu"}
+                      : "Menu"}
                 </h1>
                 <p className="text-sm text-gray-500">{currentProducts.length} items available</p>
               </div>
@@ -470,12 +548,12 @@ export default function OrderPage() {
                 </div>
 
                 {/* Variations */}
-                {menuData && menuData.variations.length > 0 && (
+                {variations.length > 0 && (
                   <div>
                     <h4 className="font-semibold mb-3">Customize Your Order</h4>
                     <div className="space-y-4">
                       {["size", "temperature"].map((type) => {
-                        const typeVariations = menuData.variations.filter((v) => v.type === type && v.is_active)
+                        const typeVariations = variations.filter((v) => v.type === type && v.is_active)
                         if (typeVariations.length === 0) return null
 
                         return (
@@ -514,11 +592,11 @@ export default function OrderPage() {
                 )}
 
                 {/* Add-ons */}
-                {menuData && menuData.add_ons.length > 0 && (
+                {addOns.length > 0 && (
                   <div>
                     <h4 className="font-semibold mb-3">Add-ons</h4>
                     <div className="space-y-3">
-                      {menuData.add_ons
+                      {addOns
                         .filter((a) => a.is_active)
                         .map((addOn) => {
                           const selectedQuantity =

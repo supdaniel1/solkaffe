@@ -3,40 +3,55 @@
 import { useState, useEffect } from "react"
 import type { CartItem } from "@/lib/types"
 
-export function useEnhancedCart() {
+interface UseEnhancedCartReturn {
+  items: CartItem[]
+  addItem: (item: CartItem) => void
+  removeItem: (itemId: string) => void
+  updateQuantity: (itemId: string, quantity: number) => void
+  clearCart: () => void
+  getTotalPrice: () => number
+  getTotalItems: () => number
+  getItemsByCategory: () => Record<string, CartItem[]>
+}
+
+const CART_STORAGE_KEY = "sol-kaffe-cart"
+
+export function useEnhancedCart(): UseEnhancedCartReturn {
   const [items, setItems] = useState<CartItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
 
   // Load cart from localStorage on mount
   useEffect(() => {
     try {
-      const savedCart = localStorage.getItem("sol-kaffe-cart")
+      const savedCart = localStorage.getItem(CART_STORAGE_KEY)
       if (savedCart) {
-        setItems(JSON.parse(savedCart))
+        const parsedCart = JSON.parse(savedCart)
+        setItems(Array.isArray(parsedCart) ? parsedCart : [])
       }
     } catch (error) {
       console.error("Error loading cart from localStorage:", error)
-    } finally {
-      setIsLoading(false)
+      setItems([])
     }
   }, [])
 
   // Save cart to localStorage whenever items change
   useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem("sol-kaffe-cart", JSON.stringify(items))
+    try {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items))
+    } catch (error) {
+      console.error("Error saving cart to localStorage:", error)
     }
-  }, [items, isLoading])
+  }, [items])
 
   const addItem = (newItem: CartItem) => {
     setItems((prevItems) => {
-      // Check if exact same item exists (same product, variations, and add-ons)
-      const existingItemIndex = prevItems.findIndex(
-        (item) =>
+      // Check if item with same product and variations already exists
+      const existingItemIndex = prevItems.findIndex((item) => {
+        return (
           item.product.id === newItem.product.id &&
           JSON.stringify(item.selectedVariations) === JSON.stringify(newItem.selectedVariations) &&
-          JSON.stringify(item.selectedAddOns) === JSON.stringify(newItem.selectedAddOns),
-      )
+          JSON.stringify(item.selectedAddOns) === JSON.stringify(newItem.selectedAddOns)
+        )
+      })
 
       if (existingItemIndex >= 0) {
         // Update existing item quantity
@@ -58,7 +73,7 @@ export function useEnhancedCart() {
     setItems((prevItems) => prevItems.filter((item) => item.id !== itemId))
   }
 
-  const updateItemQuantity = (itemId: string, quantity: number) => {
+  const updateQuantity = (itemId: string, quantity: number) => {
     if (quantity <= 0) {
       removeItem(itemId)
       return
@@ -92,25 +107,24 @@ export function useEnhancedCart() {
   }
 
   const getItemsByCategory = () => {
-    const categories: { [key: string]: CartItem[] } = {}
+    const grouped: Record<string, CartItem[]> = {}
 
     items.forEach((item) => {
       const categoryName = item.product.main_category?.name || "Other"
-      if (!categories[categoryName]) {
-        categories[categoryName] = []
+      if (!grouped[categoryName]) {
+        grouped[categoryName] = []
       }
-      categories[categoryName].push(item)
+      grouped[categoryName].push(item)
     })
 
-    return categories
+    return grouped
   }
 
   return {
     items,
-    isLoading,
     addItem,
     removeItem,
-    updateItemQuantity,
+    updateQuantity,
     clearCart,
     getTotalPrice,
     getTotalItems,

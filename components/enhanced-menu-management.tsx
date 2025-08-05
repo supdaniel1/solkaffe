@@ -1,73 +1,117 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Search, Edit, Trash2, Eye, EyeOff, Star, Clock, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Plus, Edit, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import Image from "next/image"
-import type { Product, MainCategory, ProductFormData } from "@/lib/types"
 
-interface EnhancedMenuManagementProps {
-  onProductUpdate?: () => void
+// Types
+interface Product {
+  id: string
+  name: string
+  description: string
+  price: number
+  category: string
+  image_url?: string
+  is_active: boolean
+  rating?: number
+  prep_time?: number
+  stock_quantity?: number
+  variations?: string[]
+  add_ons?: string[]
 }
 
-export function EnhancedMenuManagement({ onProductUpdate }: EnhancedMenuManagementProps) {
+interface Category {
+  id: string
+  name: string
+  description?: string
+  display_order: number
+  is_active: boolean
+}
+
+interface Variation {
+  id: string
+  name: string
+  type: string
+  price_modifier: number
+  is_active: boolean
+}
+
+interface AddOn {
+  id: string
+  name: string
+  description?: string
+  price: number
+  category?: string
+  max_quantity: number
+  is_active: boolean
+}
+
+interface FormData {
+  name: string
+  description: string
+  price: string
+  category: string
+  image_url: string
+  is_active: boolean
+  rating: string
+  prep_time: string
+  stock_quantity: string
+  variations: string[]
+  add_ons: string[]
+}
+
+export function EnhancedMenuManagement() {
   const { toast } = useToast()
 
   // State
   const [products, setProducts] = useState<Product[]>([])
-  const [categories, setCategories] = useState<MainCategory[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [variations, setVariations] = useState<Variation[]>([])
+  const [addOns, setAddOns] = useState<AddOn[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState<string>("all")
-  const [showInactiveOnly, setShowInactiveOnly] = useState(false)
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState("products")
 
   // Form state
-  const [formData, setFormData] = useState<ProductFormData>({
+  const [formData, setFormData] = useState<FormData>({
     name: "",
     description: "",
-    price: 0,
-    main_category_id: "",
-    subcategory_id: "",
+    price: "",
+    category: "",
     image_url: "",
     is_active: true,
-    is_featured: false,
-    rating: 0,
-    prep_time: 0,
-    stock_quantity: 0,
-    tags: [],
-    variation_ids: [],
-    add_on_ids: [],
+    rating: "",
+    prep_time: "",
+    stock_quantity: "",
+    variations: [],
+    add_ons: [],
   })
 
   // Load data
   useEffect(() => {
-    loadProducts()
-    loadCategories()
+    loadAllData()
   }, [])
 
-  const loadProducts = async () => {
+  const loadAllData = async () => {
+    setLoading(true)
     try {
-      const response = await fetch("/api/admin/products")
-      if (response.ok) {
-        const data = await response.json()
-        setProducts(data.data || [])
-      }
+      await Promise.all([loadProducts(), loadCategories(), loadVariations(), loadAddOns()])
     } catch (error) {
-      console.error("Error loading products:", error)
+      console.error("Error loading data:", error)
       toast({
         title: "Error",
-        description: "Failed to load products",
+        description: "Failed to load menu data",
         variant: "destructive",
       })
     } finally {
@@ -75,83 +119,195 @@ export function EnhancedMenuManagement({ onProductUpdate }: EnhancedMenuManageme
     }
   }
 
+  const loadProducts = async () => {
+    try {
+      const response = await fetch("/api/products")
+      const data = await response.json()
+      setProducts(data.data || [])
+    } catch (error) {
+      console.error("Error loading products:", error)
+    }
+  }
+
   const loadCategories = async () => {
     try {
-      const response = await fetch("/api/menu/structure")
+      const response = await fetch("/api/admin/categories")
       if (response.ok) {
         const data = await response.json()
-        setCategories(data.main_categories || [])
+        setCategories(data.data || [])
+      } else {
+        // Fallback categories
+        setCategories([
+          { id: "1", name: "ESPRESSO", description: "Espresso-based drinks", display_order: 1, is_active: true },
+          { id: "2", name: "COLD_DRINKS", description: "Cold beverages", display_order: 2, is_active: true },
+          { id: "3", name: "TEA", description: "Tea-based drinks", display_order: 3, is_active: true },
+          { id: "4", name: "PASTRIES", description: "Baked goods", display_order: 4, is_active: true },
+        ])
       }
     } catch (error) {
       console.error("Error loading categories:", error)
     }
   }
 
-  // Filter products
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.description?.toLowerCase().includes(searchQuery.toLowerCase())
-
-    const matchesCategory = selectedCategory === "all" || product.main_category_id === selectedCategory
-
-    const matchesActiveFilter = showInactiveOnly ? !product.is_active : product.is_active
-
-    return matchesSearch && matchesCategory && matchesActiveFilter
-  })
-
-  // Modal handlers
-  const openCreateModal = () => {
-    setEditingProduct(null)
-    setFormData({
-      name: "",
-      description: "",
-      price: 0,
-      main_category_id: "",
-      subcategory_id: "",
-      image_url: "",
-      is_active: true,
-      is_featured: false,
-      rating: 0,
-      prep_time: 0,
-      stock_quantity: 0,
-      tags: [],
-      variation_ids: [],
-      add_on_ids: [],
-    })
-    setIsProductModalOpen(true)
+  const loadVariations = async () => {
+    try {
+      const response = await fetch("/api/admin/variations")
+      if (response.ok) {
+        const data = await response.json()
+        setVariations(data.data || [])
+      } else {
+        // Fallback variations
+        setVariations([
+          { id: "1", name: "Small", type: "size", price_modifier: -10, is_active: true },
+          { id: "2", name: "Medium", type: "size", price_modifier: 0, is_active: true },
+          { id: "3", name: "Large", type: "size", price_modifier: 15, is_active: true },
+          { id: "4", name: "Hot", type: "temperature", price_modifier: 0, is_active: true },
+          { id: "5", name: "Iced", type: "temperature", price_modifier: 5, is_active: true },
+        ])
+      }
+    } catch (error) {
+      console.error("Error loading variations:", error)
+    }
   }
 
-  const openEditModal = (product: Product) => {
-    setEditingProduct(product)
-    setFormData({
-      name: product.name,
-      description: product.description || "",
-      price: product.price,
-      main_category_id: product.main_category_id,
-      subcategory_id: product.subcategory_id || "",
-      image_url: product.image_url || "",
-      is_active: product.is_active,
-      is_featured: product.is_featured,
-      rating: product.rating || 0,
-      prep_time: product.prep_time || 0,
-      stock_quantity: product.stock_quantity || 0,
-      tags: product.tags || [],
-      variation_ids: [],
-      add_on_ids: [],
-    })
+  const loadAddOns = async () => {
+    try {
+      const response = await fetch("/api/admin/add-ons")
+      if (response.ok) {
+        const data = await response.json()
+        setAddOns(data.data || [])
+      } else {
+        // Fallback add-ons
+        setAddOns([
+          {
+            id: "1",
+            name: "Extra Shot",
+            description: "Additional espresso shot",
+            price: 15,
+            max_quantity: 3,
+            is_active: true,
+          },
+          {
+            id: "2",
+            name: "Vanilla Syrup",
+            description: "Sweet vanilla flavoring",
+            price: 10,
+            max_quantity: 2,
+            is_active: true,
+          },
+          {
+            id: "3",
+            name: "Caramel Syrup",
+            description: "Rich caramel flavoring",
+            price: 10,
+            max_quantity: 2,
+            is_active: true,
+          },
+          {
+            id: "4",
+            name: "Extra Foam",
+            description: "Additional milk foam",
+            price: 5,
+            max_quantity: 1,
+            is_active: true,
+          },
+          {
+            id: "5",
+            name: "Oat Milk",
+            description: "Plant-based milk alternative",
+            price: 12,
+            max_quantity: 1,
+            is_active: true,
+          },
+        ])
+      }
+    } catch (error) {
+      console.error("Error loading add-ons:", error)
+    }
+  }
+
+  // Form handlers
+  const handleInputChange = (field: keyof FormData, value: string | boolean | string[]) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleVariationToggle = (variationId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      variations: prev.variations.includes(variationId)
+        ? prev.variations.filter((id) => id !== variationId)
+        : [...prev.variations, variationId],
+    }))
+  }
+
+  const handleAddOnToggle = (addOnId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      add_ons: prev.add_ons.includes(addOnId)
+        ? prev.add_ons.filter((id) => id !== addOnId)
+        : [...prev.add_ons, addOnId],
+    }))
+  }
+
+  const openProductModal = (product?: Product) => {
+    if (product) {
+      setEditingProduct(product)
+      setFormData({
+        name: product.name,
+        description: product.description,
+        price: product.price.toString(),
+        category: product.category,
+        image_url: product.image_url || "",
+        is_active: product.is_active,
+        rating: product.rating?.toString() || "",
+        prep_time: product.prep_time?.toString() || "",
+        stock_quantity: product.stock_quantity?.toString() || "",
+        variations: product.variations || [],
+        add_ons: product.add_ons || [],
+      })
+    } else {
+      setEditingProduct(null)
+      setFormData({
+        name: "",
+        description: "",
+        price: "",
+        category: "",
+        image_url: "",
+        is_active: true,
+        rating: "",
+        prep_time: "",
+        stock_quantity: "",
+        variations: [],
+        add_ons: [],
+      })
+    }
     setIsProductModalOpen(true)
   }
 
   const handleSaveProduct = async () => {
     try {
+      const productData = {
+        name: formData.name,
+        description: formData.description,
+        price: Number.parseFloat(formData.price) || 0,
+        category: formData.category,
+        image_url: formData.image_url,
+        is_active: formData.is_active,
+        rating: Number.parseFloat(formData.rating) || null,
+        prep_time: Number.parseInt(formData.prep_time) || null,
+        stock_quantity: Number.parseInt(formData.stock_quantity) || null,
+        variations: formData.variations,
+        add_ons: formData.add_ons,
+      }
+
       const url = editingProduct ? `/api/admin/products/${editingProduct.id}` : "/api/admin/products"
+
       const method = editingProduct ? "PUT" : "POST"
 
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(productData),
       })
 
       if (response.ok) {
@@ -161,7 +317,6 @@ export function EnhancedMenuManagement({ onProductUpdate }: EnhancedMenuManageme
         })
         setIsProductModalOpen(false)
         loadProducts()
-        onProductUpdate?.()
       } else {
         throw new Error("Failed to save product")
       }
@@ -188,7 +343,6 @@ export function EnhancedMenuManagement({ onProductUpdate }: EnhancedMenuManageme
           description: "Product deleted successfully",
         })
         loadProducts()
-        onProductUpdate?.()
       } else {
         throw new Error("Failed to delete product")
       }
@@ -201,21 +355,22 @@ export function EnhancedMenuManagement({ onProductUpdate }: EnhancedMenuManageme
     }
   }
 
-  const toggleProductStatus = async (product: Product) => {
+  const handleToggleProductStatus = async (productId: string, isActive: boolean) => {
     try {
-      const response = await fetch(`/api/admin/products/${product.id}`, {
+      const response = await fetch(`/api/admin/products/${productId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...product, is_active: !product.is_active }),
+        body: JSON.stringify({ is_active: !isActive }),
       })
 
       if (response.ok) {
         toast({
           title: "Success",
-          description: `Product ${!product.is_active ? "activated" : "deactivated"}`,
+          description: `Product ${!isActive ? "activated" : "deactivated"}`,
         })
         loadProducts()
-        onProductUpdate?.()
+      } else {
+        throw new Error("Failed to update product status")
       }
     } catch (error) {
       toast({
@@ -228,85 +383,168 @@ export function EnhancedMenuManagement({ onProductUpdate }: EnhancedMenuManageme
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Loading menu management...</p>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Menu Management</h2>
-          <p className="text-gray-600">Manage your products, categories, and menu items</p>
-        </div>
-        <Button onClick={openCreateModal}>
+        <h2 className="text-2xl font-bold">Menu Management</h2>
+        <Button onClick={() => openProductModal()}>
           <Plus className="w-4 h-4 mr-2" />
           Add Product
         </Button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <Input
-            placeholder="Search products..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="All Categories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {categories.map((category) => (
-              <SelectItem key={category.id} value={category.id}>
-                {category.name}
-              </SelectItem>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="products">Products</TabsTrigger>
+          <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="variations">Variations</TabsTrigger>
+          <TabsTrigger value="addons">Add-ons</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="products" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {products.map((product) => (
+              <Card key={product.id} className="relative">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{product.name}</CardTitle>
+                      <Badge variant={product.is_active ? "default" : "secondary"}>
+                        {product.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="outline" onClick={() => openProductModal(product)}>
+                        <Edit className="w-3 h-3" />
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => handleDeleteProduct(product.id)}>
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-2">{product.description}</p>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">₱{product.price}</span>
+                    <Badge variant="outline">{product.category}</Badge>
+                  </div>
+                  {(product.variations?.length || product.add_ons?.length) && (
+                    <div className="mt-2 flex gap-1">
+                      {product.variations?.length && (
+                        <Badge variant="secondary" className="text-xs">
+                          {product.variations.length} variations
+                        </Badge>
+                      )}
+                      {product.add_ons?.length && (
+                        <Badge variant="secondary" className="text-xs">
+                          {product.add_ons.length} add-ons
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                  <div className="mt-3">
+                    <Switch
+                      checked={product.is_active}
+                      onCheckedChange={() => handleToggleProductStatus(product.id, product.is_active)}
+                    />
+                    <span className="ml-2 text-sm">Available</span>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
-          </SelectContent>
-        </Select>
-        <div className="flex items-center space-x-2">
-          <Switch id="inactive-only" checked={showInactiveOnly} onCheckedChange={setShowInactiveOnly} />
-          <Label htmlFor="inactive-only" className="text-sm">
-            Show inactive only
-          </Label>
-        </div>
-      </div>
+          </div>
+        </TabsContent>
 
-      {/* Products Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProducts.map((product) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            onEdit={() => openEditModal(product)}
-            onDelete={() => handleDeleteProduct(product.id)}
-            onToggleStatus={() => toggleProductStatus(product)}
-          />
-        ))}
-      </div>
+        <TabsContent value="categories">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {categories.map((category) => (
+              <Card key={category.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    {category.name}
+                    <Badge variant={category.is_active ? "default" : "secondary"}>
+                      {category.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{category.description}</p>
+                  <div className="mt-2">
+                    <span className="text-xs text-muted-foreground">Display Order: {category.display_order}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
 
-      {/* Empty State */}
-      {filteredProducts.length === 0 && (
-        <div className="text-center py-16">
-          <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
-          <p className="text-gray-500 mb-4">
-            {searchQuery ? `No products match "${searchQuery}"` : "Get started by adding your first product"}
-          </p>
-          <Button onClick={openCreateModal}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Product
-          </Button>
-        </div>
-      )}
+        <TabsContent value="variations">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {variations.map((variation) => (
+              <Card key={variation.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    {variation.name}
+                    <Badge variant={variation.is_active ? "default" : "secondary"}>
+                      {variation.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-sm font-medium">Type: </span>
+                      <Badge variant="outline">{variation.type}</Badge>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">Price Modifier: </span>
+                      <span className={`text-sm ${variation.price_modifier >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {variation.price_modifier >= 0 ? "+" : ""}₱{variation.price_modifier}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="addons">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {addOns.map((addOn) => (
+              <Card key={addOn.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    {addOn.name}
+                    <Badge variant={addOn.is_active ? "default" : "secondary"}>
+                      {addOn.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">{addOn.description}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">₱{addOn.price}</span>
+                      <span className="text-xs text-muted-foreground">Max: {addOn.max_quantity}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Product Modal */}
       <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
@@ -315,280 +553,199 @@ export function EnhancedMenuManagement({ onProductUpdate }: EnhancedMenuManageme
             <DialogTitle>{editingProduct ? "Edit Product" : "Add New Product"}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
-            {/* Basic Info */}
-            <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-6">
+            {/* Basic Information */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Basic Information</h3>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => handleInputChange("name", e.target.value)}
+                    placeholder="Product name"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="price">Price (₱)</Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    value={formData.price}
+                    onChange={(e) => handleInputChange("price", e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
               <div>
-                <Label htmlFor="name">Product Name</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Enter product name"
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => handleInputChange("description", e.target.value)}
+                  placeholder="Product description"
+                  rows={3}
                 />
               </div>
-              <div>
-                <Label htmlFor="price">Price (₱)</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  step="0.01"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: Number.parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
 
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Enter product description"
-                rows={3}
-              />
-            </div>
-
-            {/* Categories */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="main-category">Main Category</Label>
-                <Select
-                  value={formData.main_category_id}
-                  onValueChange={(value) => setFormData({ ...formData, main_category_id: value, subcategory_id: "" })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select main category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="subcategory">Subcategory</Label>
-                <Select
-                  value={formData.subcategory_id}
-                  onValueChange={(value) => setFormData({ ...formData, subcategory_id: value })}
-                  disabled={!formData.main_category_id}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select subcategory" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories
-                      .find((cat) => cat.id === formData.main_category_id)
-                      ?.subcategories?.map((subcategory) => (
-                        <SelectItem key={subcategory.id} value={subcategory.id}>
-                          {subcategory.name}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="category">Category</Label>
+                  <Select value={formData.category} onValueChange={(value) => handleInputChange("category", value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.name}>
+                          {category.name}
                         </SelectItem>
                       ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {/* Image */}
-            <div>
-              <Label htmlFor="image-url">Image URL</Label>
-              <Input
-                id="image-url"
-                value={formData.image_url}
-                onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                placeholder="https://example.com/image.jpg"
-              />
-            </div>
-
-            {/* Additional Details */}
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="rating">Rating</Label>
-                <Input
-                  id="rating"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="5"
-                  value={formData.rating}
-                  onChange={(e) => setFormData({ ...formData, rating: Number.parseFloat(e.target.value) || 0 })}
-                  placeholder="4.5"
-                />
+                <div>
+                  <Label htmlFor="image_url">Image URL</Label>
+                  <Input
+                    id="image_url"
+                    value={formData.image_url}
+                    onChange={(e) => handleInputChange("image_url", e.target.value)}
+                    placeholder="/images/product.jpg"
+                  />
+                </div>
               </div>
-              <div>
-                <Label htmlFor="prep-time">Prep Time (min)</Label>
-                <Input
-                  id="prep-time"
-                  type="number"
-                  value={formData.prep_time}
-                  onChange={(e) => setFormData({ ...formData, prep_time: Number.parseInt(e.target.value) || 0 })}
-                  placeholder="5"
-                />
-              </div>
-              <div>
-                <Label htmlFor="stock">Stock Quantity</Label>
-                <Input
-                  id="stock"
-                  type="number"
-                  value={formData.stock_quantity}
-                  onChange={(e) => setFormData({ ...formData, stock_quantity: Number.parseInt(e.target.value) || 0 })}
-                  placeholder="100"
-                />
-              </div>
-            </div>
 
-            {/* Tags */}
-            <div>
-              <Label htmlFor="tags">Tags (comma-separated)</Label>
-              <Input
-                id="tags"
-                value={formData.tags.join(", ")}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    tags: e.target.value
-                      .split(",")
-                      .map((tag) => tag.trim())
-                      .filter(Boolean),
-                  })
-                }
-                placeholder="coffee, hot, espresso"
-              />
-            </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <Label htmlFor="rating">Rating</Label>
+                  <Input
+                    id="rating"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="5"
+                    value={formData.rating}
+                    onChange={(e) => handleInputChange("rating", e.target.value)}
+                    placeholder="4.5"
+                  />
+                </div>
 
-            {/* Switches */}
-            <div className="flex gap-6">
+                <div>
+                  <Label htmlFor="prep_time">Prep Time (min)</Label>
+                  <Input
+                    id="prep_time"
+                    type="number"
+                    value={formData.prep_time}
+                    onChange={(e) => handleInputChange("prep_time", e.target.value)}
+                    placeholder="5"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="stock_quantity">Stock Quantity</Label>
+                  <Input
+                    id="stock_quantity"
+                    type="number"
+                    value={formData.stock_quantity}
+                    onChange={(e) => handleInputChange("stock_quantity", e.target.value)}
+                    placeholder="100"
+                  />
+                </div>
+              </div>
+
               <div className="flex items-center space-x-2">
                 <Switch
-                  id="is-active"
+                  id="is_active"
                   checked={formData.is_active}
-                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                  onCheckedChange={(checked) => handleInputChange("is_active", checked)}
                 />
-                <Label htmlFor="is-active">Active</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="is-featured"
-                  checked={formData.is_featured}
-                  onCheckedChange={(checked) => setFormData({ ...formData, is_featured: checked })}
-                />
-                <Label htmlFor="is-featured">Featured</Label>
+                <Label htmlFor="is_active">Available</Label>
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex justify-end gap-3 pt-4">
+            {/* Variations Section */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Variations</h3>
+              <p className="text-sm text-muted-foreground">Select which variations apply to this product</p>
+
+              <div className="max-h-40 overflow-y-auto border rounded-lg p-3 space-y-2">
+                {variations
+                  .filter((v) => v.is_active)
+                  .map((variation) => (
+                    <div key={variation.id} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id={`variation-${variation.id}`}
+                        checked={formData.variations.includes(variation.id)}
+                        onChange={() => handleVariationToggle(variation.id)}
+                        className="rounded"
+                      />
+                      <Label htmlFor={`variation-${variation.id}`} className="flex-1 cursor-pointer">
+                        <div className="flex items-center justify-between">
+                          <span>{variation.name}</span>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {variation.type}
+                            </Badge>
+                            <span
+                              className={`text-xs ${variation.price_modifier >= 0 ? "text-green-600" : "text-red-600"}`}
+                            >
+                              {variation.price_modifier >= 0 ? "+" : ""}₱{variation.price_modifier}
+                            </span>
+                          </div>
+                        </div>
+                      </Label>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Add-ons Section */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Add-ons</h3>
+              <p className="text-sm text-muted-foreground">Select which add-ons are available for this product</p>
+
+              <div className="max-h-40 overflow-y-auto border rounded-lg p-3 space-y-2">
+                {addOns
+                  .filter((a) => a.is_active)
+                  .map((addOn) => (
+                    <div key={addOn.id} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id={`addon-${addOn.id}`}
+                        checked={formData.add_ons.includes(addOn.id)}
+                        onChange={() => handleAddOnToggle(addOn.id)}
+                        className="rounded"
+                      />
+                      <Label htmlFor={`addon-${addOn.id}`} className="flex-1 cursor-pointer">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-medium">{addOn.name}</span>
+                            {addOn.description && <p className="text-xs text-muted-foreground">{addOn.description}</p>}
+                          </div>
+                          <span className="text-sm font-medium">₱{addOn.price}</span>
+                        </div>
+                      </Label>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-2 pt-4 border-t">
               <Button variant="outline" onClick={() => setIsProductModalOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveProduct}>{editingProduct ? "Update Product" : "Create Product"}</Button>
+              <Button onClick={handleSaveProduct}>{editingProduct ? "Update" : "Create"} Product</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
     </div>
-  )
-}
-
-// Product Card Component
-function ProductCard({
-  product,
-  onEdit,
-  onDelete,
-  onToggleStatus,
-}: {
-  product: Product
-  onEdit: () => void
-  onDelete: () => void
-  onToggleStatus: () => void
-}) {
-  return (
-    <Card className={`${!product.is_active ? "opacity-60" : ""}`}>
-      <CardContent className="p-0">
-        {/* Product Image */}
-        <div className="aspect-video relative overflow-hidden rounded-t-lg">
-          <Image
-            src={product.image_url || "/placeholder.svg?height=200&width=300&query=product"}
-            alt={product.name}
-            fill
-            className="object-cover"
-          />
-          <div className="absolute top-2 left-2 flex gap-2">
-            {product.is_featured && <Badge className="bg-orange-500">Featured</Badge>}
-            {!product.is_active && <Badge variant="secondary">Inactive</Badge>}
-          </div>
-          <div className="absolute top-2 right-2">
-            <Button variant="secondary" size="sm" onClick={onToggleStatus} className="h-8 w-8 p-0">
-              {product.is_active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </Button>
-          </div>
-        </div>
-
-        {/* Product Info */}
-        <div className="p-4">
-          <div className="flex items-start justify-between mb-2">
-            <h3 className="font-semibold text-gray-900 line-clamp-1">{product.name}</h3>
-            <div className="text-lg font-bold text-gray-900">₱{product.price.toFixed(2)}</div>
-          </div>
-
-          <p className="text-sm text-gray-600 mb-3 line-clamp-2">{product.description}</p>
-
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              {product.rating && (
-                <div className="flex items-center gap-1">
-                  <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                  <span className="text-xs text-gray-600">{product.rating}</span>
-                </div>
-              )}
-              {product.prep_time && (
-                <div className="flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-gray-400" />
-                  <span className="text-xs text-gray-600">{product.prep_time}m</span>
-                </div>
-              )}
-            </div>
-            <div className="text-xs text-gray-500">Stock: {product.stock_quantity}</div>
-          </div>
-
-          {/* Tags */}
-          {product.tags && product.tags.length > 0 && (
-            <div className="flex gap-1 mb-3">
-              {product.tags.slice(0, 3).map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
-              {product.tags.length > 3 && (
-                <Badge variant="secondary" className="text-xs">
-                  +{product.tags.length - 3}
-                </Badge>
-              )}
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onEdit} className="flex-1 bg-transparent">
-              <Edit className="w-3 h-3 mr-1" />
-              Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onDelete}
-              className="text-red-600 hover:text-red-700 bg-transparent"
-            >
-              <Trash2 className="w-3 h-3" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   )
 }
